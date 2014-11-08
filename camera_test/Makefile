@@ -1,16 +1,12 @@
 # $File: Makefile
-# $Date: Fri Nov 07 23:40:02 2014 +0800
+# $Date: Sat Nov 08 11:29:55 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
-BUILD_DIR = build
-TARGET = imgdisp
-ARGS = 
+TARGETS := $(shell cat .gitignore)
 
-CXX = g++ -std=c++11
+CXX := g++ -std=c++11
 
-PKGCONFIG_LIBS = opencv glu
-SRC_EXT = cpp
-CPPFLAGS = -Isrc
+PKGCONFIG_LIBS := opencv glu
 override OPTFLAG ?= -O2
 
 override CXXFLAGS += \
@@ -22,44 +18,20 @@ override CXXFLAGS += \
 override LDFLAGS += $(shell pkg-config --libs $(PKGCONFIG_LIBS)) -lglut
 override V ?= @
 
-CXXSOURCES = $(shell find src -name "*.$(SRC_EXT)")
-OBJS = $(addprefix $(BUILD_DIR)/,$(CXXSOURCES:.$(SRC_EXT)=.o))
-DEPFILES = $(OBJS:.o=.d)
+all: $(TARGETS)
 
-
-all: $(TARGET)
-
--include $(DEPFILES)
-
-$(BUILD_DIR)/%.o: %.$(SRC_EXT)
-	@echo "[cxx] $< ..."
-	@mkdir -pv $(dir $@)
-	@$(CXX) $(CPPFLAGS) -MM -MT "$@" "$<"  > "$(@:.o=.d)"
-	$(V)$(CXX) -c $< -o $@ $(CXXFLAGS)
-
-
-$(TARGET): $(OBJS)
-	@echo "Linking ..."
-	$(V)$(CXX) $(OBJS) -o $@ $(LDFLAGS)
+%: %.cpp
+	@echo "[compile] $@"
+	$(V)$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $<
 
 clean:
-	rm -rf $(BUILD_DIR) $(TARGET)
+	rm -rf $(TARGETS)
 
-run: $(TARGET)
-	./$(TARGET) $(ARGS)
-
-gdb: 
+debug: 
 	OPTFLAG=-O0 make -j4
-	gdb --args $(TARGET) $(ARGS)
 
-git:
-	git add -A
-	git commit -a
 
-gprof:
-	OPTFLAG='-O3 -pg' LDFLAGS=-pg make -j4
-
-.PHONY: all clean run gdb git gprof
+.PHONY: all clean debug
 
 # vim: ft=make
 

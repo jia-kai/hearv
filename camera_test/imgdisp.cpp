@@ -1,6 +1,6 @@
 /*
  * $File: imgdisp.cpp
- * $Date: Sat Nov 08 00:57:02 2014 +0800
+ * $Date: Sat Nov 08 12:17:58 2014 +0800
  * $Author: jiakai <jia.kai66@gmail.com>
  */
 
@@ -9,6 +9,8 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/opengl_interop.hpp>
 #include <sys/time.h>
+
+constexpr int SCALE_FACTOR = 10;
 
 double get_time() {
     struct timeval tv;
@@ -33,8 +35,18 @@ int main(int argc, char **argv) {
             fprintf(stderr, "failed to load %s: %m\n", argv[i]);
             return -1;
         }
+        cv::Mat img1(img.rows + 2, img.cols + 2, CV_8UC3, cv::Scalar{0});
+        img1.at<cv::Vec3b>(0, 0) = {0, 0, 255};
+        img1.at<cv::Vec3b>(0, img.cols + 1) = {0, 255, 0};
+        img1.at<cv::Vec3b>(img.rows + 1, 0) = {255, 0, 0};
+        img1.at<cv::Vec3b>(img.rows + 1, img.cols + 1) = {255, 0, 0};
+        img.copyTo(img1(cv::Rect(1, 1, img.cols, img.rows)));
+        img = img1;
+        cv::resize(img, img, {0, 0}, SCALE_FACTOR, SCALE_FACTOR,
+                cv::INTER_NEAREST);
         images[i - 1].copyFrom(img);
     }
+    cv::resizeWindow("img", images[0].cols(), images[0].rows());
 
     int nr_frame = 0;
     size_t idx = 0;
