@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: riesz.py
-# $Date: Thu Nov 20 22:23:16 2014 +0800
+# $Date: Fri Nov 21 01:09:28 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 import pyximport
@@ -13,66 +13,126 @@ import sys
 from scipy import signal
 from fastmath import smooth_orient
 
-EPS = 1e-10
+floatX = 'float64'
 
-RIESZ_KERNEL = np.array(
-    [[-0.12, -0.34, -0.12],
-     [0, 0, 0],
-     [0.12, 0.34, 0.12]], dtype='float32')
+class RieszPyramid(object):
+    EPS = 1e-10
+    riesz_kernel = np.array(
+        [[-0.12, -0.34, -0.12],
+         [0, 0, 0],
+         [0.12, 0.34, 0.12]], dtype=floatX)
 
-def build_lap_pyr(img, min_size=10, max_nr_level=None):
-    """:return: list of images, layers in the Laplacian Pyramid"""
-    if max_nr_level is None:
-        max_nr_level = float('inf')
-    im_min = np.min(img)
-    im_max = np.max(img)
-    assert im_min >= 0 and im_max <= 255 and im_max >= 10, (im_min, im_max)
-    img = img.astype('float32') / 255.0
-    rst = []
-    while min(img.shape[:2]) >= min_size and len(rst) < max_nr_level:
-        next_img = cv2.pyrDown(img)
-        recon = cv2.pyrUp(next_img, dstsize=img.shape[:2][::-1])
-        rst.append(img - recon)
-        img = next_img
-    return rst
+    min_pyr_img_size = 10
+    min_pyr_scale = None
+    max_pyr_scale = None
 
-def get_riesz_triple(img):
-    """:param img: 2D input image of shape (h, w)
-    :return: 3D image of shape (h, w, 3), where the 3 channels correspond to
-    amplitude, orientation and phase
-    """
-    assert img.ndim == 2
-    img = img.astype('float32')
-    r1 = signal.convolve2d(img, RIESZ_KERNEL, mode='valid')
-    r2 = signal.convolve2d(img, RIESZ_KERNEL.T, mode='valid')
-    kh, kw = RIESZ_KERNEL.shape
-    img = img[kh/2:-(kh/2), kw/2:-(kw/2)]
-    amp = np.sqrt(np.square(img) + np.square(r1) + np.square(r2)) + EPS
-    phase = np.arccos(img / amp)
-    t = amp * np.sin(phase) + EPS
-    orient = np.arctan2(r2 / t, r1 / t)
-    rst = np.concatenate(map(lambda a: np.expand_dims(a, axis=2),
-                             (amp, orient, phase)), axis=2)
-    assert np.all(np.isfinite(rst)), \
-        np.transpose(np.nonzero(1 - np.isfinite(rst)))
-    smooth_orient(rst)
-    return rst
+    _img_ref = None
+    _lap_pyr_ref = None
+    _riesz_pyr_ref = None
 
-def get_phase_diff(riesz0, riesz1):
-    assert riesz0.shape == riesz1.shape
-    if riesz0.ndim == 2:
-        assert riesz0.shape[1] == 3
-        rst = riesz1[:, 2] - riesz0[:, 2]
-    else:
-        rst = riesz1[:, :, 2] - riesz0[:, :, 2]
-    rst = np.mod(rst, np.pi * 2)
-    rst[rst >= np.pi] -= np.pi * 2
-    return rst
+    _pyr_amps_phasediff = None
+    """list of (sqr(amp), phase_diff) images for each scale in lap pyr,
+    all scaled to original image size"""
 
-def get_avg_phase_diff(riesz0, riesz1):
-    amp = (riesz0[:, :, 0] + riesz1[:, :, 0]) / 2
-    pd = get_phase_diff(riesz0, riesz1)
-    return np.sum(pd * amp) / np.sum(amp)
+    def __init__(self, img_ref, min_scale=1, max_scale=3):
+        self.min_pyr_scale = int(min_scale)
+        self.max_pyr_scale = int(max_scale)
+        self._img_ref = img_ref.copy()
+        self._lap_pyr_ref = self.build_lap_pyr(img_ref)
+        self._riesz_pyr_ref = map(self.get_riesz_triple, self._lap_pyr_ref)
+
+    def set_image(self, img):
+        assert img.shape == self._img_ref.shape
+        pyr = self.build_lap_pyr(img)
+        tsize_cv = img.shape[:2][::-1]
+        self._pyr_amps_phasediff = list()
+        for riesz0, band1 in zip(self._riesz_pyr_ref, pyr):
+            riesz1 = self.get_riesz_triple(band1)
+            assert riesz0.shape == riesz1.shape
+            pd = self.get_phase_diff(riesz0, riesz1)
+            pd = cv2.resize(pd, tsize_cv)
+            amp = (riesz0[:, :, 0] + riesz1[:, :, 0]) / 2
+            amp = cv2.resize(amp, tsize_cv)
+            amps = np.square(amp)
+            self._pyr_amps_phasediff.append((amps, pd))
+
+    def get_avg_phase_diff(self, subslice=slice(None, None, None)):
+        """average phase diff within a block"""
+        val = []
+        for amps, pd in self._pyr_amps_phasediff:
+            amps = amps[subslice]
+            pd = pd[subslice]
+            val.append(np.sum(amps * pd) / np.sum(amps))
+        return float(np.mean(val))
+
+    def build_lap_pyr(self, img):
+        """:return: list of images, layers in the Laplacian Pyramid"""
+        im_min = np.min(img)
+        im_max = np.max(img)
+        assert im_min >= 0 and im_max <= 255 and im_max >= 10, (im_min, im_max)
+        img = img.astype(floatX) / 255.0
+        rst = []
+        while min(img.shape[:2]) >= self.min_pyr_img_size and \
+                len(rst) <= self.max_pyr_scale:
+            next_img = cv2.pyrDown(img)
+            recon = cv2.pyrUp(next_img, dstsize=img.shape[:2][::-1])
+            rst.append(img - recon)
+            img = next_img
+        return rst[self.min_pyr_scale:]
+
+    def get_riesz_triple(self, img):
+        """:param img: 2D input image of shape (h, w)
+        :return: 3D image of shape (h, w, 3), where the 3 channels correspond to
+        amplitude, orientation and phase
+        """
+        assert img.ndim == 2
+        img = img.astype(floatX)
+        r1 = signal.convolve2d(img, self.riesz_kernel, mode='valid')
+        r2 = signal.convolve2d(img, self.riesz_kernel.T, mode='valid')
+        kh, kw = self.riesz_kernel.shape
+        assert kh % 2 == 1 and kw % 2 == 1 and kh == kw
+        img = img[kh/2:-(kh/2), kw/2:-(kw/2)]
+        amp = np.sqrt(np.square(img) + np.square(r1) + np.square(r2))
+        phase = np.arccos(img / (amp + self.EPS))
+        t = amp * np.sin(phase) + self.EPS
+        orient = np.arctan2(r2 / t, r1 / t)
+        rst = np.concatenate(map(lambda a: np.expand_dims(a, axis=2),
+                                 (amp, orient, phase)), axis=2)
+        assert np.all(np.isfinite(rst)), \
+            np.transpose(np.nonzero(1 - np.isfinite(rst)))
+        smooth_orient(rst)
+        return rst
+
+    def get_phase_diff(self, riesz0, riesz1):
+        assert riesz0.shape == riesz1.shape
+        if riesz0.ndim == 2:
+            assert riesz0.shape[1] == 3
+            rst = riesz1[:, 2] - riesz0[:, 2]
+        else:
+            rst = riesz1[:, :, 2] - riesz0[:, :, 2]
+        rst = np.mod(rst, np.pi * 2)
+        rst[rst >= np.pi] -= np.pi * 2
+        return rst
+
+    def disp_refimg_riesz(self):
+        import matplotlib.pyplot as plt
+        for idx, img in enumerate(self._riesz_pyr_ref):
+            row = img[img.shape[0] / 2].T
+            plt.subplot(3, 1, 1)
+            plt.title('amp')
+            plt.plot(row[0])
+            plt.subplot(3, 1, 2)
+            plt.title('orient')
+            plt.plot(row[1])
+            plt.subplot(3, 1, 3)
+            plt.title('phase')
+            plt.plot(row[2])
+            plt.show()
+
+class Slicer(object):
+    def __getitem__(self, idx):
+        return idx
+slicer = Slicer()
 
 def normalize_disp(img):
     img = cv2.normalize(img, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
@@ -85,7 +145,6 @@ def imshow(name, img, wait=False):
             sys.exit()
 
 def test_motion():
-    import matplotlib.pyplot as plt
     SIZE = 500
     k = np.pi / 40
     shift = 0.05 * k
@@ -94,63 +153,57 @@ def test_motion():
         x = np.tile(x, SIZE).reshape(SIZE, SIZE)
         y = np.tile(x0, SIZE).reshape(SIZE, SIZE).T
         val = (np.sin(x + y) + 1) / 2
-        return val * 255
+        #return val * 255
         return normalize_disp(val)
     img0 = make(x0)
     img1 = make(x0 + shift)
-    riesz0 = get_riesz_triple(build_lap_pyr(img0, max_nr_level=1)[0])
-    riesz1 = get_riesz_triple(build_lap_pyr(img1, max_nr_level=1)[0])
-    if True:
-        row = riesz0[30]
-        row1 = riesz1[30]
-        plt.figure()
-        plt.subplot(4, 1, 1)
-        plt.title('amp')
-        plt.plot(row[:, 0])
-        plt.subplot(4, 1, 2)
-        plt.title('orientation')
-        plt.plot(row[:, 1])
-        plt.subplot(4, 1, 3)
-        plt.title('phase')
-        plt.plot(row[:, 2])
-        plt.subplot(4, 1, 4)
-        plt.title('phase_diff')
-        plt.plot(get_phase_diff(row, row1))
-        plt.figure()
-        plt.title('row_orient_avg')
-        plt.plot(np.mean(riesz0[:, :, 1], axis=1))
-        plt.show()
-    riesz_diff = riesz0 - riesz1
-    print riesz0[100, 30:70]
-    print riesz_diff[100, 30:70]
-    print shift, get_avg_phase_diff(riesz0, riesz1)
-
-    imshow('img0', img0)
-    imshow('img1', img1)
-    imshow('phase0', riesz0[:, :, 2])
-    imshow('sign(orit0)', np.sign(riesz0[:, :, 1]))
-    imshow('sign(phase_diff)', np.sign(riesz_diff[:, :, 2]))
-    imshow('riesz_diff', riesz_diff, True)
+    pyr = RieszPyramid(img0)
+    #pyr.disp_refimg_riesz()
+    pyr.set_image(img1)
+    get = pyr.get_avg_phase_diff()
+    print shift, get, shift / get
+    #imshow('img0', img0)
+    #imshow('img1', img1, True)
 
 def main():
     test_motion()
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('img')
-    parser.add_argument('--level', type=int,
-                        help='max level of Laplacian pyramid')
+    parser.add_argument('img0')
+    parser.add_argument('img1')
+    parser.add_argument('-o', '--output', help='output plot')
     args = parser.parse_args()
 
-    img = cv2.imread(args.img, cv2.IMREAD_GRAYSCALE)
-    assert img is not None
+    import matplotlib
+    if args.output:
+        matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
 
-    cv2.imshow('orig', img)
-    lap_pyr = build_lap_pyr(img, max_nr_level=args.level)
-    for idx, i in enumerate(lap_pyr):
-        riesz = get_riesz_triple(i)
-        cv2.imshow('img{}'.format(idx), normalize_disp(i))
-        cv2.imshow('phase{}'.format(idx), normalize_disp(riesz[:, :, 2]))
-    cv2.waitKey(-1)
+    img0 = cv2.imread(args.img0, cv2.IMREAD_GRAYSCALE)
+    pyr = RieszPyramid(img0)
+    pyr.disp_refimg_riesz()
+    pyr.set_image(cv2.imread(args.img1, cv2.IMREAD_GRAYSCALE))
+
+    HEIGHT = 10
+    pdiff = []
+    for row in range(HEIGHT / 2, img0.shape[0] - HEIGHT * 3 / 2):
+        pdiff.append(pyr.get_avg_phase_diff(slicer[row:row+HEIGHT]))
+    fig = plt.figure()
+    ax = fig.add_subplot(2, 1, 1)
+    ax.plot(pdiff)
+    ax = fig.add_subplot(2, 1, 2)
+    fft = np.fft.fft(pdiff)
+    sample_rate = 1.0 / 16e-6
+    freq = sample_rate / len(pdiff) * np.arange(1, len(fft) + 1)
+    cut_low = min(np.nonzero(freq >= 50)[0])
+    cut_high = min(np.nonzero(freq >= 1000)[0])
+    fft = fft[cut_low:cut_high]
+    freq = freq[cut_low:cut_high]
+    ax.plot(freq, np.abs(fft))
+    if args.output:
+        fig.savefig(args.output)
+    else:
+        plt.show()
 
 
 if __name__ == '__main__':
