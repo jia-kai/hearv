@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: riesz.py
-# $Date: Fri Nov 21 01:09:28 2014 +0800
+# $Date: Fri Nov 21 01:37:33 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 import pyximport
@@ -34,7 +34,7 @@ class RieszPyramid(object):
     """list of (sqr(amp), phase_diff) images for each scale in lap pyr,
     all scaled to original image size"""
 
-    def __init__(self, img_ref, min_scale=1, max_scale=3):
+    def __init__(self, img_ref, min_scale=0, max_scale=3):
         self.min_pyr_scale = int(min_scale)
         self.max_pyr_scale = int(max_scale)
         self._img_ref = img_ref.copy()
@@ -71,6 +71,7 @@ class RieszPyramid(object):
         im_max = np.max(img)
         assert im_min >= 0 and im_max <= 255 and im_max >= 10, (im_min, im_max)
         img = img.astype(floatX) / 255.0
+        img = cv2.GaussianBlur(img, (5, 5), 2)
         rst = []
         while min(img.shape[:2]) >= self.min_pyr_img_size and \
                 len(rst) <= self.max_pyr_scale:
@@ -147,12 +148,13 @@ def imshow(name, img, wait=False):
 def test_motion():
     SIZE = 500
     k = np.pi / 40
-    shift = 0.05 * k
+    shift = 5 * k
     x0 = np.arange(SIZE) * k
     def make(x):
         x = np.tile(x, SIZE).reshape(SIZE, SIZE)
         y = np.tile(x0, SIZE).reshape(SIZE, SIZE).T
-        val = (np.sin(x + y) + 1) / 2
+        #val = (np.sin(x + y) + 1) / 2
+        val = (np.sin(x) + np.sin(y) + 2) / 4
         #return val * 255
         return normalize_disp(val)
     img0 = make(x0)
@@ -162,11 +164,11 @@ def test_motion():
     pyr.set_image(img1)
     get = pyr.get_avg_phase_diff()
     print shift, get, shift / get
-    #imshow('img0', img0)
-    #imshow('img1', img1, True)
+    imshow('img0', img0)
+    imshow('img1', img1, True)
 
 def main():
-    test_motion()
+    #test_motion()
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('img0')
@@ -181,7 +183,7 @@ def main():
 
     img0 = cv2.imread(args.img0, cv2.IMREAD_GRAYSCALE)
     pyr = RieszPyramid(img0)
-    pyr.disp_refimg_riesz()
+    #pyr.disp_refimg_riesz()
     pyr.set_image(cv2.imread(args.img1, cv2.IMREAD_GRAYSCALE))
 
     HEIGHT = 10
