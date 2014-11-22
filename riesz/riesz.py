@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: riesz.py
-# $Date: Sat Nov 22 10:37:26 2014 +0800
+# $Date: Sat Nov 22 16:04:01 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 import pyximport
@@ -50,28 +50,36 @@ class RieszPyramid(object):
             riesz1 = self.get_riesz_triple(band1, do_smooth=False)
             assert riesz0.shape == riesz1.shape
             regularize_orient(riesz1, riesz0)
-            pd = self.get_phase_diff(riesz0, riesz1)
-            pd = cv2.resize(pd, tsize_cv)
-            od = cv2.resize(riesz1[:, :, 1] - riesz0[:, :, 1], tsize_cv)
-            assert np.max(np.abs(od)) <= np.pi / 2 + 1e-3
             amp = (riesz0[:, :, 0] + riesz1[:, :, 0]) / 2
+            pd = self.get_phase_diff(riesz0, riesz1)
+            #od = riesz1[:, :, 1] - riesz0[:, :, 1]
+            #assert np.max(np.abs(od)) <= np.pi / 2 + 1e-3
+            od = riesz1[:, :, 2] - riesz0[:, :, 2]
+            od = np.mod(od, np.pi * 2)
+            od[od >= np.pi] -= np.pi * 2
+            if True:
+                diff = riesz1 - riesz0
+                diff[:, :, 2] = od
+                self._disp_riesz(diff)
+            pd = cv2.resize(pd, tsize_cv)
+            od = cv2.resize(od, tsize_cv)
             amp = cv2.resize(amp, tsize_cv)
             amps = np.square(amp)
             self._pyr_phasediff.append((amps, pd, od))
 
     def get_avg_phase_diff(self, subslice=slice(None, None, None)):
         """average phase diff within a block"""
-        val = []
+        vsum = 0
+        asum = 0
         sign = 0
         for amps, pd, od in self._pyr_phasediff:
             amps = amps[subslice]
             pd = pd[subslice]
-            val.append(np.sum(amps * pd) / np.sum(amps))
-            od = np.mean(od[subslice])
-            print od
-            sign += od
-        print '==='
-        return float(np.mean(val)) * np.sign(sign)
+            od = od[subslice]
+            vsum += np.sum(amps * pd)
+            asum += np.sum(amps)
+            sign += np.sum(amps * od)
+        return float(vsum / asum * np.sign(sign))
 
     def build_lap_pyr(self, img):
         """:return: list of images, layers in the Laplacian Pyramid"""
@@ -166,17 +174,18 @@ def imshow(name, img, wait=False):
 def test_motion():
     SIZE = 500
     k = np.pi / 40
-    shift = 0.01 * k
-    x0 = np.arange(SIZE) * k
-    def make(x):
-        x = np.tile(x, SIZE).reshape(SIZE, SIZE)
-        y = np.tile(x0, SIZE).reshape(SIZE, SIZE).T
+    shift = -0.1 * k
+    y0 = np.arange(SIZE) * k
+    def make(y):
+        x = np.tile(y0, SIZE).reshape(SIZE, SIZE)
+        y = np.tile(y, SIZE).reshape(SIZE, SIZE).T
         #val = (np.sin(x + y) + 1) / 2
         val = (np.sin(x) + np.sin(y) + 2) / 4
+        val += np.random.normal(scale=0.01, size=val.shape)
         #return val * 255
         return normalize_disp(val)
-    img0 = make(x0)
-    img1 = make(x0 + shift)
+    img0 = make(y0)
+    img1 = make(y0 + shift)
     pyr = RieszPyramid(img0)
     #pyr.disp_refimg_riesz()
     pyr.set_image(img1)
@@ -204,7 +213,7 @@ def main():
     #pyr.disp_refimg_riesz()
     pyr.set_image(cv2.imread(args.img1, cv2.IMREAD_GRAYSCALE))
 
-    HEIGHT = 10
+    HEIGHT = 1
     pdiff = []
     for row in range(HEIGHT / 2, img0.shape[0] - HEIGHT * 3 / 2):
         pdiff.append(pyr.get_avg_phase_diff(slicer[row:row+HEIGHT]))
