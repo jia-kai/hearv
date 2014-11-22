@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: riesz.py
-# $Date: Sat Nov 22 16:04:01 2014 +0800
+# $Date: Sun Nov 23 00:15:04 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 import pyximport
@@ -52,12 +52,12 @@ class RieszPyramid(object):
             regularize_orient(riesz1, riesz0)
             amp = (riesz0[:, :, 0] + riesz1[:, :, 0]) / 2
             pd = self.get_phase_diff(riesz0, riesz1)
-            #od = riesz1[:, :, 1] - riesz0[:, :, 1]
-            #assert np.max(np.abs(od)) <= np.pi / 2 + 1e-3
-            od = riesz1[:, :, 2] - riesz0[:, :, 2]
-            od = np.mod(od, np.pi * 2)
-            od[od >= np.pi] -= np.pi * 2
-            if True:
+            od = riesz1[:, :, 1] - riesz0[:, :, 1]
+            assert np.max(np.abs(od)) <= np.pi / 2 + 1e-3
+            #od = riesz1[:, :, 2] - riesz0[:, :, 2]
+            #od = np.mod(od, np.pi * 2)
+            #od[od >= np.pi] -= np.pi * 2
+            if False:
                 diff = riesz1 - riesz0
                 diff[:, :, 2] = od
                 self._disp_riesz(diff)
@@ -78,7 +78,7 @@ class RieszPyramid(object):
             od = od[subslice]
             vsum += np.sum(amps * pd)
             asum += np.sum(amps)
-            sign += np.sum(amps * od)
+            sign += np.mean(od)
         return float(vsum / asum * np.sign(sign))
 
     def build_lap_pyr(self, img):
@@ -97,7 +97,8 @@ class RieszPyramid(object):
             img = next_img
         return rst[self.min_pyr_scale:]
 
-    def get_riesz_triple(self, img, do_smooth=True):
+    def get_riesz_triple(self, img, do_smooth=True, spatial_blur=0,
+                         spatial_ksize=(3, 3)):
         """:param img: 2D input image of shape (h, w)
         :return: 3D image of shape (h, w, 3), where the 3 channels correspond to
         amplitude, orientation and phase
@@ -113,11 +114,22 @@ class RieszPyramid(object):
         phase = np.arccos(img / (amp + self.EPS))
         t = amp * np.sin(phase) + self.EPS
         orient = np.arctan2(r2 / t, r1 / t)
+        if spatial_blur:
+            amp_blur = cv2.GaussianBlur(amp, spatial_ksize, spatial_blur)
+            def blur(v):
+                a = cv2.GaussianBlur(amp * v, spatial_ksize, spatial_blur)
+                return a / amp_blur
+            v0 = blur(phase * np.cos(orient))
+            v1 = blur(phase * np.sin(orient))
+            phase = np.sqrt(np.square(v0) + np.square(v1))
+            t = phase + self.EPS
+            orient = np.arctan2(v1, v0)
         rst = np.concatenate(map(lambda a: np.expand_dims(a, axis=2),
                                  (amp, orient, phase)), axis=2)
         assert np.all(np.isfinite(rst))
         if do_smooth:
             smooth_orient(rst)
+
         return rst
 
     def get_phase_diff(self, riesz0, riesz1):
@@ -174,18 +186,20 @@ def imshow(name, img, wait=False):
 def test_motion():
     SIZE = 500
     k = np.pi / 40
-    shift = -0.1 * k
-    y0 = np.arange(SIZE) * k
-    def make(y):
-        x = np.tile(y0, SIZE).reshape(SIZE, SIZE)
-        y = np.tile(y, SIZE).reshape(SIZE, SIZE).T
+    shift = -0.01 * k
+    v0 = np.arange(SIZE) * k
+    def make(v1):
+        x = np.tile(v1, SIZE).reshape(SIZE, SIZE)
+        y = np.tile(v0, SIZE).reshape(SIZE, SIZE).T
         #val = (np.sin(x + y) + 1) / 2
         val = (np.sin(x) + np.sin(y) + 2) / 4
         val += np.random.normal(scale=0.01, size=val.shape)
         #return val * 255
         return normalize_disp(val)
-    img0 = make(y0)
-    img1 = make(y0 + shift)
+    img0 = make(v0)
+    img1 = make(v0 + shift)
+    cv2.imwrite('/tmp/img0.png', img0)
+    cv2.imwrite('/tmp/img1.png', img1)
     pyr = RieszPyramid(img0)
     #pyr.disp_refimg_riesz()
     pyr.set_image(img1)
@@ -196,11 +210,15 @@ def test_motion():
 
 def main():
     #test_motion()
+    import json
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('img0')
-    parser.add_argument('img1')
+    parser.add_argument('img1', nargs='+')
     parser.add_argument('-o', '--output', help='output plot')
+    parser.add_argument('--do', help='data output')
+    parser.add_argument('--update', type=int,
+                        help='number of frames to update ref image')
     args = parser.parse_args()
 
     import matplotlib
@@ -211,29 +229,42 @@ def main():
     img0 = cv2.imread(args.img0, cv2.IMREAD_GRAYSCALE)
     pyr = RieszPyramid(img0)
     #pyr.disp_refimg_riesz()
-    pyr.set_image(cv2.imread(args.img1, cv2.IMREAD_GRAYSCALE))
+    vals = []
+    for img1 in args.img1:
+        img1 = cv2.imread(img1, cv2.IMREAD_GRAYSCALE)
+        pyr.set_image(img1)
+        cur = float(pyr.get_avg_phase_diff())
+        vals.append(cur)
+        print cur
+        if args.update and len(vals) % args.update == 0:
+            print 'update ref'
+            pyr = RieszPyramid(img1)
+        continue
 
-    HEIGHT = 1
-    pdiff = []
-    for row in range(HEIGHT / 2, img0.shape[0] - HEIGHT * 3 / 2):
-        pdiff.append(pyr.get_avg_phase_diff(slicer[row:row+HEIGHT]))
-    fig = plt.figure()
-    ax = fig.add_subplot(2, 1, 1)
-    ax.plot(pdiff)
-    ax = fig.add_subplot(2, 1, 2)
-    fft = np.fft.fft(pdiff)
-    sample_rate = 1.0 / 16e-6
-    freq = sample_rate / len(pdiff) * np.arange(1, len(fft) + 1)
-    cut_low = min(np.nonzero(freq >= 50)[0])
-    cut_high = min(np.nonzero(freq >= 1000)[0])
-    fft = fft[cut_low:cut_high]
-    freq = freq[cut_low:cut_high]
-    ax.plot(freq, np.abs(fft))
-    if args.output:
-        fig.savefig(args.output)
-    else:
-        plt.show()
-
+        HEIGHT = 1
+        pdiff = []
+        for row in range(HEIGHT / 2, img0.shape[0] - HEIGHT * 3 / 2):
+            pdiff.append(pyr.get_avg_phase_diff(slicer[row:row+HEIGHT]))
+        fig = plt.figure()
+        ax = fig.add_subplot(2, 1, 1)
+        ax.plot(pdiff)
+        ax = fig.add_subplot(2, 1, 2)
+        fft = np.fft.fft(pdiff)
+        sample_rate = 1.0 / 16e-6
+        freq = sample_rate / len(pdiff) * np.arange(1, len(fft) + 1)
+        cut_low = min(np.nonzero(freq >= 50)[0])
+        cut_high = min(np.nonzero(freq >= 1000)[0])
+        fft = fft[cut_low:cut_high]
+        freq = freq[cut_low:cut_high]
+        ax.plot(freq, np.abs(fft))
+        if args.output:
+            fig.savefig(args.output)
+        else:
+            plt.show()
+    print vals
+    if args.do:
+        with open(args.do, 'w') as fout:
+            json.dump(vals, fout)
 
 if __name__ == '__main__':
     main()
