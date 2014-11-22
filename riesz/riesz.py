@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: riesz.py
-# $Date: Sun Nov 23 00:15:04 2014 +0800
+# $Date: Sun Nov 23 01:29:52 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 import pyximport
@@ -52,8 +52,9 @@ class RieszPyramid(object):
             regularize_orient(riesz1, riesz0)
             amp = (riesz0[:, :, 0] + riesz1[:, :, 0]) / 2
             pd = self.get_phase_diff(riesz0, riesz1)
-            od = riesz1[:, :, 1] - riesz0[:, :, 1]
-            assert np.max(np.abs(od)) <= np.pi / 2 + 1e-3
+            #od = riesz1[:, :, 1] - riesz0[:, :, 1]
+            #assert np.max(np.abs(od)) <= np.pi / 2 + 1e-3
+            od = np.sin(riesz1[:, :, 2] - riesz0[:, :, 2])
             #od = riesz1[:, :, 2] - riesz0[:, :, 2]
             #od = np.mod(od, np.pi * 2)
             #od[od >= np.pi] -= np.pi * 2
@@ -142,7 +143,8 @@ class RieszPyramid(object):
             a = riesz0[:, :, 2]
             b = riesz1[:, :, 2]
         rst = np.minimum(np.abs(b - a), np.abs(b + a))
-        assert rst.min() >= 0 and rst.max() < np.pi
+        rst = np.minimum(rst, np.pi - rst)
+        assert rst.min() >= 0 and rst.max() < np.pi / 2 + 1e-3
         #rst *= np.sign((b - a).sum())
         return rst
 
@@ -183,33 +185,45 @@ def imshow(name, img, wait=False):
         if chr(cv2.waitKey(-1) & 0xFF) == 'q':
             sys.exit()
 
-def test_motion():
+def test_motion(plot=False):
     SIZE = 500
     k = np.pi / 40
-    shift = -0.01 * k
     v0 = np.arange(SIZE) * k
     def make(v1):
         x = np.tile(v1, SIZE).reshape(SIZE, SIZE)
         y = np.tile(v0, SIZE).reshape(SIZE, SIZE).T
         #val = (np.sin(x + y) + 1) / 2
         val = (np.sin(x) + np.sin(y) + 2) / 4
-        val += np.random.normal(scale=0.01, size=val.shape)
+        #val += np.random.normal(scale=0.01, size=val.shape)
         #return val * 255
         return normalize_disp(val)
     img0 = make(v0)
-    img1 = make(v0 + shift)
-    cv2.imwrite('/tmp/img0.png', img0)
-    cv2.imwrite('/tmp/img1.png', img1)
     pyr = RieszPyramid(img0)
-    #pyr.disp_refimg_riesz()
-    pyr.set_image(img1)
-    get = pyr.get_avg_phase_diff()
-    print shift, get, shift / get
-    imshow('img0', img0)
-    imshow('img1', img1, True)
+    if not plot:
+        shift = -0.5 * k
+        img1 = make(v0 + shift)
+        cv2.imwrite('/tmp/img0.png', img0)
+        cv2.imwrite('/tmp/img1.png', img1)
+        #pyr.disp_refimg_riesz()
+        pyr.set_image(img1)
+        get = pyr.get_avg_phase_diff()
+        print shift, get, shift / get
+        imshow('img0', img0)
+        imshow('img1', img1, True)
+    else:
+        import matplotlib.pyplot as plt
+        x = np.arange(-0.5, 0.1, 0.5) * k
+        y = []
+        img0 = make(v0)
+        for shift in x:
+            pyr.set_image(make(v0 + shift))
+            y.append(pyr.get_avg_phase_diff())
+            print shift, y[-1]
+        plt.plot(x, y)
+        plt.show()
 
 def main():
-    #test_motion()
+    #test_motion(True)
     import json
     import argparse
     parser = argparse.ArgumentParser()
