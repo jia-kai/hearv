@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: riesz.py
-# $Date: Fri Nov 21 01:37:33 2014 +0800
+# $Date: Sat Nov 22 10:37:26 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 import pyximport
@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 import sys
 from scipy import signal
-from fastmath import smooth_orient
+from fastmath import smooth_orient, regularize_orient
 
 floatX = 'float64'
 
@@ -30,9 +30,9 @@ class RieszPyramid(object):
     _lap_pyr_ref = None
     _riesz_pyr_ref = None
 
-    _pyr_amps_phasediff = None
-    """list of (sqr(amp), phase_diff) images for each scale in lap pyr,
-    all scaled to original image size"""
+    _pyr_phasediff = None
+    """list of (sqr(amp), phase_diff, orient_diff) images for each scale in lap
+        pyr, all scaled to original image size"""
 
     def __init__(self, img_ref, min_scale=0, max_scale=3):
         self.min_pyr_scale = int(min_scale)
@@ -45,25 +45,33 @@ class RieszPyramid(object):
         assert img.shape == self._img_ref.shape
         pyr = self.build_lap_pyr(img)
         tsize_cv = img.shape[:2][::-1]
-        self._pyr_amps_phasediff = list()
+        self._pyr_phasediff = list()
         for riesz0, band1 in zip(self._riesz_pyr_ref, pyr):
-            riesz1 = self.get_riesz_triple(band1)
+            riesz1 = self.get_riesz_triple(band1, do_smooth=False)
             assert riesz0.shape == riesz1.shape
+            regularize_orient(riesz1, riesz0)
             pd = self.get_phase_diff(riesz0, riesz1)
             pd = cv2.resize(pd, tsize_cv)
+            od = cv2.resize(riesz1[:, :, 1] - riesz0[:, :, 1], tsize_cv)
+            assert np.max(np.abs(od)) <= np.pi / 2 + 1e-3
             amp = (riesz0[:, :, 0] + riesz1[:, :, 0]) / 2
             amp = cv2.resize(amp, tsize_cv)
             amps = np.square(amp)
-            self._pyr_amps_phasediff.append((amps, pd))
+            self._pyr_phasediff.append((amps, pd, od))
 
     def get_avg_phase_diff(self, subslice=slice(None, None, None)):
         """average phase diff within a block"""
         val = []
-        for amps, pd in self._pyr_amps_phasediff:
+        sign = 0
+        for amps, pd, od in self._pyr_phasediff:
             amps = amps[subslice]
             pd = pd[subslice]
             val.append(np.sum(amps * pd) / np.sum(amps))
-        return float(np.mean(val))
+            od = np.mean(od[subslice])
+            print od
+            sign += od
+        print '==='
+        return float(np.mean(val)) * np.sign(sign)
 
     def build_lap_pyr(self, img):
         """:return: list of images, layers in the Laplacian Pyramid"""
@@ -81,7 +89,7 @@ class RieszPyramid(object):
             img = next_img
         return rst[self.min_pyr_scale:]
 
-    def get_riesz_triple(self, img):
+    def get_riesz_triple(self, img, do_smooth=True):
         """:param img: 2D input image of shape (h, w)
         :return: 3D image of shape (h, w, 3), where the 3 channels correspond to
         amplitude, orientation and phase
@@ -99,36 +107,46 @@ class RieszPyramid(object):
         orient = np.arctan2(r2 / t, r1 / t)
         rst = np.concatenate(map(lambda a: np.expand_dims(a, axis=2),
                                  (amp, orient, phase)), axis=2)
-        assert np.all(np.isfinite(rst)), \
-            np.transpose(np.nonzero(1 - np.isfinite(rst)))
-        smooth_orient(rst)
+        assert np.all(np.isfinite(rst))
+        if do_smooth:
+            smooth_orient(rst)
         return rst
 
     def get_phase_diff(self, riesz0, riesz1):
         assert riesz0.shape == riesz1.shape
         if riesz0.ndim == 2:
             assert riesz0.shape[1] == 3
-            rst = riesz1[:, 2] - riesz0[:, 2]
+            a = riesz0[:, 2]
+            b = riesz1[:, 2]
         else:
-            rst = riesz1[:, :, 2] - riesz0[:, :, 2]
-        rst = np.mod(rst, np.pi * 2)
-        rst[rst >= np.pi] -= np.pi * 2
+            a = riesz0[:, :, 2]
+            b = riesz1[:, :, 2]
+        rst = np.minimum(np.abs(b - a), np.abs(b + a))
+        assert rst.min() >= 0 and rst.max() < np.pi
+        #rst *= np.sign((b - a).sum())
         return rst
 
-    def disp_refimg_riesz(self):
+    def _disp_riesz(self, img, show=True):
         import matplotlib.pyplot as plt
-        for idx, img in enumerate(self._riesz_pyr_ref):
-            row = img[img.shape[0] / 2].T
-            plt.subplot(3, 1, 1)
-            plt.title('amp')
-            plt.plot(row[0])
-            plt.subplot(3, 1, 2)
-            plt.title('orient')
-            plt.plot(row[1])
-            plt.subplot(3, 1, 3)
-            plt.title('phase')
-            plt.plot(row[2])
+        assert img.ndim == 3 and img.shape[2] == 3
+        row = img[img.shape[0] / 2].T
+        plt.subplot(3, 1, 1)
+        plt.title('amp')
+        plt.plot(row[0])
+        plt.subplot(3, 1, 2)
+        plt.title('orient')
+        plt.plot(row[1])
+        plt.subplot(3, 1, 3)
+        plt.title('phase')
+        plt.plot(row[2])
+        if show:
             plt.show()
+
+    def disp_refimg_riesz(self, max_nr_level=0):
+        for idx, img in enumerate(self._riesz_pyr_ref):
+            if max_nr_level and idx >= max_nr_level:
+                return
+            self._disp_riesz(img)
 
 class Slicer(object):
     def __getitem__(self, idx):
@@ -148,7 +166,7 @@ def imshow(name, img, wait=False):
 def test_motion():
     SIZE = 500
     k = np.pi / 40
-    shift = 5 * k
+    shift = 0.01 * k
     x0 = np.arange(SIZE) * k
     def make(x):
         x = np.tile(x, SIZE).reshape(SIZE, SIZE)

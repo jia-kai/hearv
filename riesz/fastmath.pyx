@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # $File: fastmath.pyx
-# $Date: Fri Nov 21 01:32:17 2014 +0800
+# $Date: Sat Nov 22 09:47:46 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 import numpy as np
@@ -60,3 +60,25 @@ def smooth_orient(np.ndarray[DTYPE_t, ndim=3] riesz):
     for row in range(nr_row):
         vnow = _update_row(riesz[row], vprev)
         vprev = vprev * smooth_coeff + vnow * (1 - smooth_coeff)
+
+@cython.boundscheck(False)
+def regularize_orient(np.ndarray[DTYPE_t, ndim=3] img,
+                      np.ndarray[DTYPE_t, ndim=3] ref):
+    cdef int row
+    cdef DTYPE_t vimg, vref, phase
+    for row in range(img.shape[0]):
+        r0 = img[row]
+        r1 = ref[row]
+        for col in range(img.shape[1]):
+            vimg = r0[col, 1]
+            vref = r1[col, 1]
+            if abs(vimg - vref) > MAX_DIFF:
+                phase = r0[col, 2]
+                while abs(vimg - vref) > MAX_DIFF:
+                    if vimg < vref:
+                        vimg += np.pi
+                    else:
+                        vimg -= np.pi
+                    phase = -phase
+                r0[col, 1] = vimg
+                r0[col, 2] = phase
