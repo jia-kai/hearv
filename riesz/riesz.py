@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: riesz.py
-# $Date: Sun Nov 23 01:29:52 2014 +0800
+# $Date: Sun Nov 23 01:53:02 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 import pyximport
@@ -98,7 +98,7 @@ class RieszPyramid(object):
             img = next_img
         return rst[self.min_pyr_scale:]
 
-    def get_riesz_triple(self, img, do_smooth=True, spatial_blur=0,
+    def get_riesz_triple(self, img, do_smooth=True, spatial_blur=0.5,
                          spatial_ksize=(3, 3)):
         """:param img: 2D input image of shape (h, w)
         :return: 3D image of shape (h, w, 3), where the 3 channels correspond to
@@ -194,7 +194,7 @@ def test_motion(plot=False):
         y = np.tile(v0, SIZE).reshape(SIZE, SIZE).T
         #val = (np.sin(x + y) + 1) / 2
         val = (np.sin(x) + np.sin(y) + 2) / 4
-        #val += np.random.normal(scale=0.01, size=val.shape)
+        val += np.random.normal(scale=1.5 / 255, size=val.shape)
         #return val * 255
         return normalize_disp(val)
     img0 = make(v0)
@@ -212,7 +212,7 @@ def test_motion(plot=False):
         imshow('img1', img1, True)
     else:
         import matplotlib.pyplot as plt
-        x = np.arange(-0.5, 0.1, 0.5) * k
+        x = np.arange(-0.5, 0.5, 0.01) * k
         y = []
         img0 = make(v0)
         for shift in x:
@@ -220,6 +220,10 @@ def test_motion(plot=False):
             y.append(pyr.get_avg_phase_diff())
             print shift, y[-1]
         plt.plot(x, y)
+        plt.title('noise, rounding (with spatial blur 0.5)')
+        plt.xlabel('ground truth shift')
+        plt.ylabel('shift recon')
+        plt.savefig('data/shift-noise-rounding-spblur0.5.png')
         plt.show()
 
 def main():
