@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: riesz.py
-# $Date: Sun Nov 23 01:53:02 2014 +0800
+# $Date: Sat Nov 29 00:37:18 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 import pyximport
@@ -80,7 +80,7 @@ class RieszPyramid(object):
             vsum += np.sum(amps * pd)
             asum += np.sum(amps)
             sign += np.mean(od)
-        return float(vsum / asum * np.sign(sign))
+        return float(vsum / asum)
 
     def build_lap_pyr(self, img):
         """:return: list of images, layers in the Laplacian Pyramid"""
@@ -142,6 +142,7 @@ class RieszPyramid(object):
         else:
             a = riesz0[:, :, 2]
             b = riesz1[:, :, 2]
+        return b - a
         rst = np.minimum(np.abs(b - a), np.abs(b + a))
         rst = np.minimum(rst, np.pi - rst)
         assert rst.min() >= 0 and rst.max() < np.pi / 2 + 1e-3
@@ -200,7 +201,7 @@ def test_motion(plot=False):
     img0 = make(v0)
     pyr = RieszPyramid(img0)
     if not plot:
-        shift = -0.5 * k
+        shift = -0.05 * k
         img1 = make(v0 + shift)
         cv2.imwrite('/tmp/img0.png', img0)
         cv2.imwrite('/tmp/img1.png', img1)
@@ -212,7 +213,7 @@ def test_motion(plot=False):
         imshow('img1', img1, True)
     else:
         import matplotlib.pyplot as plt
-        x = np.arange(-0.5, 0.5, 0.01) * k
+        x = np.arange(-0.5, 0.5, 0.02) * k
         y = []
         img0 = make(v0)
         for shift in x:
@@ -227,7 +228,7 @@ def test_motion(plot=False):
         plt.show()
 
 def main():
-    #test_motion(True)
+    #test_motion(False)
     import json
     import argparse
     parser = argparse.ArgumentParser()

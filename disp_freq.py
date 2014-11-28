@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: disp_freq.py
-# $Date: Sat Nov 22 23:57:12 2014 +0800
+# $Date: Sun Nov 23 12:45:25 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 import matplotlib.pyplot as plt
@@ -22,6 +22,8 @@ def main():
                         help='do not shift mean value to zero')
     parser.add_argument('--clip', type=float,
                         help='clip all samples to be within range [-x, x]')
+    parser.add_argument('-o', '--output',
+                        help='outpout the plot')
     args = parser.parse_args()
 
     with open(args.fpath) as fin:
@@ -38,6 +40,8 @@ def main():
 
     fig = plt.figure()
     ax = fig.add_subplot(2, 1, 1)
+    ax.set_xlabel('sample number')
+    ax.set_ylabel('displacement')
     ax.plot(vals)
 
     fft = np.fft.fft(vals)[:len(vals) / 2]
@@ -47,7 +51,12 @@ def main():
         fft = fft[fl:]
         freq = freq[fl:]
     ax = fig.add_subplot(2, 1, 2)
+    ax.set_xlabel('freq')
+    ax.set_ylabel('amplitude')
     ax.plot(freq, np.abs(fft))
+
+    if args.output:
+        fig.savefig(args.output)
     
     plt.show()
 
