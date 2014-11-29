@@ -1,0 +1,42 @@
+% $File: misc.tex
+% $Date: Sat Nov 29 16:41:56 2014 +0800
+% $Author: jiakai <jia.kai66@gmail.com>
+
+\section{进度计划}
+
+\subsection{中期检查}
+预计可完成初步的单频音的高频信号恢复，并能听到声音；
+重要需要解决一些全局平滑的问题。
+
+\subsection{期末检查}
+
+预计能完成基于直接拍摄扬声器的图像的多频音高频信号恢复，
+主要难点在降噪和对帧间无采样区间的插值。
+希望能够恢复出可接受的音乐或语音。
+另外最终算法确定后会进行一些工程上的加速，希望能做到实时
+(\cite{Davis2014VisualMic}中处理数秒视频需要几个小时)。
+
+还不能确定能否实现对其它物体表面震动的被动恢复，
+因为感觉拍摄的噪声比较大，而且H.264编码会引入时间上的artifact，
+并且恢复效果也与音量、物体材质、音源方向等有关，
+需要进一步大量实验。
+
+
+\section{资料文档结构及说明}
+所有代码均在\url{https://github.com/jia-kai/hearv}上，目录结构描述如下：
+
+\dirtree{%
+    .1 /.
+    .2 camera\_test\DTcomment{生成规律性图案测试相机，后来没用上}.
+    .2 disp\_freq.py\DTcomment{显示一维数组及其FFT}.
+    .2 extract\_img.sh\DTcomment{从视频中抽取指定时间段的图片文件}.
+    .2 get\_rolling.py\DTcomment{自动分析卷帘快门的图像并计算线延迟}.
+    .2 playground\DTcomment{尝试用opencv的光流和phase correlation计算运动的脚本}.
+    .2 riesz.
+    .3 riesz.py\DTcomment{Riesz变换及后处理}.
+    .3 fastmath.py\DTcomment{cython代码，目前仅有朝向平滑算法的实现}.
+    .2 data\DTcomment{3.2G的各种实验视频和图片文件}.
+    .2 midterm\DTcomment{本中期报告的源码}.
+}
+
+% vim: filetype=tex foldmethod=marker foldmarker=f{{{,f}}} 

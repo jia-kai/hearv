@@ -1,0 +1,72 @@
+% $File: report.tex
+% $Date: Sat Nov 29 16:42:07 2014 +0800
+% $Author: jiakai <jia.kai66@gmail.com>
+
+\documentclass[a4paper]{article}
+\usepackage{amsmath,amssymb,amsthm,fontspec,verbatim,graphicx,subcaption,dirtree}
+\usepackage[hyperfootnotes=false,colorlinks,linkcolor=black,anchorcolor=black,citecolor=black]{hyperref}
+\usepackage[top=2in, bottom=1.5in, left=1in, right=1in]{geometry}
+ 
+\newcommand{\addplot}[1]{\begin{center}
+	\includegraphics[width=0.6\paperwidth,height=0.2\paperheight,keepaspectratio]{#1}
+\end{center}}
+
+% minted
+% \inputmintedConfigured[additional minted options]{lang}{file path}
+\usepackage{minted}
+\newcommand{\inputmintedConfigured}[3][]{\inputminted[fontsize=\scriptsize,
+	label=#3,linenos,frame=lines,framesep=0.8em,tabsize=4,#1]{#2}{#3}}
+% \*src[additional minted options]{file path}
+\newcommand{\cppsrc}[2][]{\inputmintedConfigured[#1]{cpp}{#2}}
+
+% bib 
+\usepackage{biblatex}
+\bibliography{refs.bib}
+\defbibheading{bibliography}{\section{参考文献}}
+
+% math
+\usepackage{bm}
+\newcommand{\trans}[1]{#1^\intercal}
+\numberwithin{equation}{section}
+\renewcommand{\vec}[1]{\boldsymbol{#1}}
+\newcommand{\dif}{\mathrm{d}}
+\usepackage{mathtools}
+\DeclarePairedDelimiter{\ceil}{\lceil}{\rceil}
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+% \textref{marker}{text}
+\newcommand{\textref}[2]{\hyperref[#1]{#2}}
+\newcommand{\figref}[1]{\hyperref[fig:#1]{\figurename~\ref*{fig:#1}}}
+\newcommand{\eqnref}[1]{\hyperref[eqn:#1]{(\ref*{eqn:#1})}}
+\newcommand{\secref}[1]{\hyperref[sec:#1]{\ref*{sec:#1}节}}
+
+% zhspacing
+\usepackage{zhspacing}
+\zhspacing
+
+\newlength{\figwidth}
+\setlength{\figwidth}{150mm}
+
+\renewcommand{\today}{\number\year 年 \number\month 月 \number\day 日}
+\renewcommand{\abstractname}{摘要}
+\renewcommand{\contentsname}{目录}
+\renewcommand{\tablename}{表}
+\renewcommand{\figurename}{图}
+
+\title{信号处理SRT第三次汇报}
+\author{清华大学\\贾开~宋方睿}
+\date{\today}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\input{intro}
+\input{method}
+\input{expr}
+\input{misc}
+
+\printbibliography
+\end{document}
+
+% vim: filetype=tex foldmethod=marker foldmarker=f{{{,f}}}
+

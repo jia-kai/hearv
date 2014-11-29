@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: riesz.py
-# $Date: Sat Nov 29 00:37:18 2014 +0800
+# $Date: Sat Nov 29 16:33:44 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 import pyximport
@@ -190,18 +190,20 @@ def test_motion(plot=False):
     SIZE = 500
     k = np.pi / 40
     v0 = np.arange(SIZE) * k
+    sigma = 1.5
     def make(v1):
         x = np.tile(v1, SIZE).reshape(SIZE, SIZE)
         y = np.tile(v0, SIZE).reshape(SIZE, SIZE).T
         #val = (np.sin(x + y) + 1) / 2
         val = (np.sin(x) + np.sin(y) + 2) / 4
-        val += np.random.normal(scale=1.5 / 255, size=val.shape)
+        if sigma:
+            val += np.random.normal(scale=sigma/255.0, size=val.shape)
         #return val * 255
         return normalize_disp(val)
     img0 = make(v0)
-    pyr = RieszPyramid(img0)
     if not plot:
-        shift = -0.05 * k
+        pyr = RieszPyramid(img0)
+        shift = 0.01 * k
         img1 = make(v0 + shift)
         cv2.imwrite('/tmp/img0.png', img0)
         cv2.imwrite('/tmp/img1.png', img1)
@@ -213,22 +215,26 @@ def test_motion(plot=False):
         imshow('img1', img1, True)
     else:
         import matplotlib.pyplot as plt
-        x = np.arange(-0.5, 0.5, 0.02) * k
-        y = []
-        img0 = make(v0)
-        for shift in x:
-            pyr.set_image(make(v0 + shift))
-            y.append(pyr.get_avg_phase_diff())
-            print shift, y[-1]
-        plt.plot(x, y)
-        plt.title('noise, rounding (with spatial blur 0.5)')
-        plt.xlabel('ground truth shift')
-        plt.ylabel('shift recon')
-        plt.savefig('data/shift-noise-rounding-spblur0.5.png')
+        for sigma in [0, 1.5, 3, 6, 10]:
+            x = np.arange(-0.5, 0.5, 0.01) * k
+            y = []
+            img0 = make(v0)
+            pyr = RieszPyramid(img0)
+            for shift in x:
+                pyr.set_image(make(v0 + shift))
+                y.append(pyr.get_avg_phase_diff())
+                print sigma, shift, y[-1], shift / y[-1]
+            plt.plot(x / k, np.array(y) / k,
+                     label=r'$\sigma$={}/255'.format(sigma))
+        plt.legend(loc='best')
+        plt.grid(True)
+        plt.xlabel('ground truth shift (pixels)')
+        plt.ylabel('phase diff')
+        plt.savefig('/tmp/fig.png')
         plt.show()
 
 def main():
-    #test_motion(False)
+    test_motion(True)
     import json
     import argparse
     parser = argparse.ArgumentParser()
@@ -258,7 +264,6 @@ def main():
         if args.update and len(vals) % args.update == 0:
             print 'update ref'
             pyr = RieszPyramid(img1)
-        continue
 
         HEIGHT = 1
         pdiff = []
@@ -266,15 +271,19 @@ def main():
             pdiff.append(pyr.get_avg_phase_diff(slicer[row:row+HEIGHT]))
         fig = plt.figure()
         ax = fig.add_subplot(2, 1, 1)
+        ax.set_xlabel('sensor row')
+        ax.set_ylabel('displacement')
         ax.plot(pdiff)
         ax = fig.add_subplot(2, 1, 2)
         fft = np.fft.fft(pdiff)
-        sample_rate = 1.0 / 16e-6
+        sample_rate = 1.0 / 18.3e-6
         freq = sample_rate / len(pdiff) * np.arange(1, len(fft) + 1)
         cut_low = min(np.nonzero(freq >= 50)[0])
         cut_high = min(np.nonzero(freq >= 1000)[0])
         fft = fft[cut_low:cut_high]
         freq = freq[cut_low:cut_high]
+        ax.set_xlabel('freq')
+        ax.set_ylabel('amplitude')
         ax.plot(freq, np.abs(fft))
         if args.output:
             fig.savefig(args.output)
