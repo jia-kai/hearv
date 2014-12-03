@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # $File: fastmath.pyx
-# $Date: Sat Nov 22 09:47:46 2014 +0800
+# $Date: Tue Dec 02 00:14:27 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 import numpy as np
@@ -82,3 +82,19 @@ def regularize_orient(np.ndarray[DTYPE_t, ndim=3] img,
                     phase = -phase
                 r0[col, 1] = vimg
                 r0[col, 2] = phase
+
+@cython.boundscheck(False)
+def calc_min_phase_diff(np.ndarray[DTYPE_t, ndim=2] ref,
+                        np.ndarray[DTYPE_t, ndim=2] dest):
+    cdef int row, col
+    cdef DTYPE_t d0, d1
+    for row in range(ref.shape[0]):
+        v0 = ref[row]
+        v1 = dest[row]
+        for col in range(ref.shape[1]):
+            d0 = v1[col] - v0[col]
+            d1 = -v1[col] - v0[col]
+            if abs(d0) < abs(d1):
+                v1[col] = d0
+            else:
+                v1[col] = d1
