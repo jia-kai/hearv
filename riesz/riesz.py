@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: riesz.py
-# $Date: Thu Dec 04 00:27:33 2014 +0800
+# $Date: Sat Dec 06 00:38:08 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 import pyximport
@@ -53,7 +53,7 @@ class RieszPyramidBuilder(object):
         im_max = np.max(img)
         assert im_min >= 0 and im_max <= 255 and im_max >= 10, (im_min, im_max)
         img = img.astype(floatX) / 255.0
-        img = cv2.GaussianBlur(img, (5, 5), 2)
+        img = cv2.GaussianBlur(img, (0, 0), 2)
         assert img.ndim == 2
         rst = []
         lb = self.pyrdown_kernel.shape[0] / 2
@@ -295,13 +295,12 @@ def main():
         
         amp = pyr_builder.get_avg_phase_diff_freq(pyr0, pyr1)
         freq = 1.0 / line_delay * np.arange(len(amp)) / (len(amp) * 2)
-        fl = min(np.nonzero(freq >= 200)[0])
+        fl = min(np.nonzero(freq >= 100)[0])
         freq = freq[fl:]
         amp = amp[fl:]
-        fh = min(np.nonzero(freq > 1000)[0])
+        fh = min(np.nonzero(freq > 2000)[0])
         freq = freq[:fh]
         amp = amp[:fh]
-        print len(freq)
         plt.plot(freq, amp)
         plt.show()
 
