@@ -1,17 +1,26 @@
 # -*- coding: utf-8 -*-
 # $File: pyramid_quat.py
-# $Date: Sun Dec 07 14:21:10 2014 +0800
+# $Date: Sun Dec 07 16:18:12 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from .config import floatX
+from .pyramid import RieszPyramidBuilderBase
+from .analyze import Motion1DAnalyserBase
+from .fastmath import smooth_pca
 
 import cv2
 import numpy as np
-import sys
 from scipy import signal
 
-class RieszPyramid(object):
+import logging
+logger = logging.getLogger(__name__)
+
+class RieszQuatPyramid(object):
     __slots__ = ['levels', 'img_shape']
+
+    @classmethod
+    def make_motion_analyser(cls, pyr_list):
+        return PCAMotion1DAnalyser(pyr_list)
 
     def __init__(self, levels, img_shape):
         self.levels = levels
@@ -21,43 +30,14 @@ class RieszPyramid(object):
     def nr_level(self):
         return len(self.levels)
 
-class RieszQuatPyramidBuilder(object):
+class RieszQuatPyramidBuilder(RieszPyramidBuilderBase):
     """quaternionic pyramid: amplitude, phi cos(theta), phi sin(theta)"""
-    EPS = np.finfo(floatX).tiny
-    riesz_kernel = np.array(
-        [[-0.12, -0.34, -0.12],
-         [0, 0, 0],
-         [0.12, 0.34, 0.12]], dtype=floatX)
-
-    min_pyr_img_size = 10
-    min_pyr_scale = 0
-    max_pyr_scale = 3
-    spatial_blur = 0.5
-    spatial_ksize = (3, 3)
-
     def __call__(self, img):
-        """:return: RieszPyramid"""
+        """:return: RieszQuatPyramid"""
         levels = []
         for idx, bandi in enumerate(self._build_lap_pyr(img)):
             levels.append(self._get_riesz_triple(bandi))
-        return RieszPyramid(levels, img.shape)
-
-    def _build_lap_pyr(self, img):
-        """:return: list of images, layers in the Laplacian Pyramid"""
-        im_min = np.min(img)
-        im_max = np.max(img)
-        assert im_min >= 0 and im_max <= 255 and im_max >= 10, (im_min, im_max)
-        img = img.astype(floatX) / 255.0
-        img = cv2.GaussianBlur(img, (0, 0), 2)
-        assert img.ndim == 2
-        rst = []
-        while len(rst) <= self.max_pyr_scale:
-            assert min(img.shape) >= self.min_pyr_img_size
-            next_img = cv2.pyrDown(img)
-            recon = cv2.pyrUp(next_img, dstsize=img.shape[::-1])
-            rst.append(img - recon)
-            img = next_img
-        return rst[self.min_pyr_scale:]
+        return RieszQuatPyramid(levels, img.shape)
 
     def _get_riesz_triple(self, img):
         """:param img: 2D input image of shape (h, w)
@@ -107,3 +87,80 @@ class RieszQuatPyramidBuilder(object):
         plt.plot(row[2])
         if show:
             plt.show()
+
+
+class PCAMotion1DAnalyser(Motion1DAnalyserBase):
+    __slots__ = Motion1DAnalyserBase.__slots__ + ['level_local_pca']
+
+    def __init__(self, pyr_list):
+        super(PCAMotion1DAnalyser, self).__init__(pyr_list)
+        for i in pyr_list:
+            assert isinstance(i, RieszQuatPyramid)
+        self.pyr_list = pyr_list
+        self.level_local_pca = []
+        for i in range(self.nr_level):
+            self._init_pt_pca(i)
+
+    def show_pca(self, level=0, show=True):
+        plt.figure()
+        pca = self.level_local_pca[level]
+        for dx in [0, 1]:
+            for dy in [0, 1]:
+                x = []
+                y = []
+                h, w = self.pyr_list[0].levels[level].shape[:2]
+                coord = h / 2 + dy, w / 2 + dx
+                for i in self.pyr_list:
+                    camp, cx, cy = i.levels[level][coord]
+                    x.append(cx)
+                    y.append(cy)
+                x = np.array(x)
+                y = np.array(y)
+                pca_x, pca_y = pca[coord]
+                plt.subplot(2, 2, dy * 2 + dx + 1)
+                plt.scatter(x, y)
+                x0 = np.mean(x)
+                y0 = np.mean(y)
+                plt.scatter([x0], [y0], s=[5])
+                plt.plot([x0, x0 + pca_x], [y0, y0 + pca_y])
+        if show:
+            plt.show()
+
+    def local_motion_map(self, frame, level):
+        v0 = self.pyr_list[frame].levels[level]
+        v1 = self.pyr_list[0].levels[level]
+        pca = self.level_local_pca[level]
+        md = np.sum((v0[:, :, 1:] - v1[:, :, 1:]) * pca, axis=2)
+        return md, (v0[:, :, 0] + v1[:, :, 0]) / 2
+
+    def _init_pt_pca(self, level):
+        """compute the PCA of motion of each point in a list of pyramid at given
+        level
+        :return: array(h, w, 2), last dim is pca (x, y)"""
+        pyr_list = self.pyr_list
+        logger.info('computing point-wise PCA for {} pyrmids at level {}'.format(
+            len(pyr_list), level))
+        a = np.concatenate([i.levels[level][:, :, 1:2] for i in pyr_list],
+                           axis=2)
+        b = np.concatenate([i.levels[level][:, :, 2:3] for i in pyr_list],
+                           axis=2)
+        a -= np.mean(a, axis=2, keepdims=True)
+        b -= np.mean(b, axis=2, keepdims=True)
+        w00 = np.sum(np.square(a), axis=2)
+        w01 = np.sum(a * b, axis=2)
+        w11 = np.sum(np.square(b), axis=2)
+        eq_b = -(w00 + w11)
+        eq_c = w00 * w11 - w01 * w01
+        eq_delta = np.sqrt(np.square(eq_b) - 4 * eq_c)
+        eq_x = (-eq_b + eq_delta) / 2
+        x = w11 - eq_x
+        y = -w01
+        k = 1 / np.sqrt(np.square(x) + np.square(y))
+        x *= k
+        y *= k
+        h, w = a.shape[:2]
+        result = np.concatenate(
+            [x.reshape(h, w, 1), y.reshape(h, w, 1)], axis=2)
+        assert np.isfinite(np.sum(result))
+        smooth_pca(result)
+        self.level_local_pca.append(result)

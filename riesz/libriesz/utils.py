@@ -1,10 +1,8 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: utils.py
-# $Date: Sun Dec 07 15:27:36 2014 +0800
+# $Date: Sun Dec 07 16:54:34 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
-
-from .pyramid_quat import RieszQuatPyramidBuilder, RieszPyramid
 
 import cv2
 import numpy as np
@@ -16,20 +14,29 @@ import cPickle as pickle
 
 logger = logging.getLogger(__name__)
 
-def get_riesz_pyr_with_cache(fpath):
+def get_riesz_pyr_with_cache(fpath, use_quat=False):
+    from .pyramid_quat import RieszQuatPyramidBuilder, RieszQuatPyramid
+    from .pyramid import RieszPyramidBuilder, RieszPyramid
+    if use_quat:
+        builder = RieszQuatPyramidBuilder()
+        pyrclass = RieszQuatPyramid
+    else:
+        builder = RieszPyramidBuilder()
+        pyrclass = RieszPyramid
     pyr_fpath = fpath[:fpath.rfind('.')] + '-rieszpyr.pkl'
     if os.path.isfile(pyr_fpath):
         logger.info('load cached pyr from {}'.format(pyr_fpath))
         with open(pyr_fpath) as fin:
             obj = pickle.load(fin)
-        assert isinstance(obj, RieszPyramid)
+        assert isinstance(obj, pyrclass)
         return obj
-    logger.info('computing riesz pyramid: {}'.format(fpath))
+    logger.info('computing riesz pyramid: fpath={} builder={} pyr={}'.format(
+        fpath, type(builder).__name__, pyrclass.__name__))
     img = cv2.imread(fpath, cv2.CV_LOAD_IMAGE_GRAYSCALE)
     assert img is not None, 'failed to read {}'.format(fpath)
     img = img.T
-    obj = RieszQuatPyramidBuilder()(img)
-    assert isinstance(obj, RieszPyramid)
+    obj = builder(img)
+    assert isinstance(obj, pyrclass)
     with open(pyr_fpath, 'w') as fout:
         pickle.dump(obj, fout, pickle.HIGHEST_PROTOCOL)
     return obj

@@ -1,27 +1,21 @@
 # -*- coding: utf-8 -*-
 # $File: analyze.py
-# $Date: Sun Dec 07 15:44:02 2014 +0800
+# $Date: Sun Dec 07 17:22:32 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
-from .fastmath import smooth_pca
 from .config import floatX
+from .utils import plot_val_with_fft
 
 import matplotlib.pyplot as plt
 import numpy as np
 
+from abc import ABCMeta, abstractmethod
 import logging
 logger = logging.getLogger(__name__)
 
-class PCAMotion1DAnalyser(object):
-    __slots__ = ['pyr_list', 'level_local_pca']
-
-    def __init__(self, pyr_list):
-        assert len(pyr_list) >= 2 and \
-            all(i.img_shape == pyr_list[0].img_shape for i in pyr_list)
-        self.pyr_list = pyr_list
-        self.level_local_pca = []
-        for i in range(self.nr_level):
-            self._init_pt_pca(i)
+class Motion1DAnalyserBase(object):
+    __metaclass__ = ABCMeta
+    __slots__ = ['pyr_list']
 
     @property
     def nr_level(self):
@@ -31,70 +25,19 @@ class PCAMotion1DAnalyser(object):
     def nr_frame(self):
         return len(self.pyr_list)
 
-    def show_pca(self, level=0, show=True):
-        plt.figure()
-        pca = self.level_local_pca[level]
-        for dx in [0, 1]:
-            for dy in [0, 1]:
-                x = []
-                y = []
-                h, w = self.pyr_list[0].levels[level].shape[:2]
-                coord = h / 2 + dy, w / 2 + dx
-                for i in self.pyr_list:
-                    camp, cx, cy = i.levels[level][coord]
-                    x.append(cx)
-                    y.append(cy)
-                x = np.array(x)
-                y = np.array(y)
-                pca_x, pca_y = pca[coord]
-                plt.subplot(2, 2, dy * 2 + dx + 1)
-                plt.scatter(x, y)
-                x0 = np.mean(x)
-                y0 = np.mean(y)
-                plt.scatter([x0], [y0], s=[5])
-                plt.plot([x0, x0 + pca_x], [y0, y0 + pca_y])
-        if show:
-            plt.show()
-
+    @abstractmethod
     def local_motion_map(self, frame, level):
-        """:return: motion map, amplitude map"""
-        v0 = self.pyr_list[frame].levels[level]
-        v1 = self.pyr_list[0].levels[level]
-        pca = self.level_local_pca[level]
-        md = np.sum((v0[:, :, 1:] - v1[:, :, 1:]) * pca, axis=2)
-        return md, (v0[:, :, 0] + v1[:, :, 0]) / 2
+        """get local motion map for every pixel at specific level and frame
+            index
+        :param frame: int, frame index
+        :param level: int, level index
+        :return: motion map, amplitude map"""
 
-    def _init_pt_pca(self, level):
-        """compute the PCA of motion of each point in a list of pyramid at given
-        level
-        :return: array(h, w, 2), last dim is pca (x, y)"""
-        pyr_list = self.pyr_list
-        logger.info('computing point-wise PCA for {} pyrmids at level {}'.format(
-            len(pyr_list), level))
-        a = np.concatenate([i.levels[level][:, :, 1:2] for i in pyr_list],
-                           axis=2)
-        b = np.concatenate([i.levels[level][:, :, 2:3] for i in pyr_list],
-                           axis=2)
-        a -= np.mean(a, axis=2, keepdims=True)
-        b -= np.mean(b, axis=2, keepdims=True)
-        w00 = np.sum(np.square(a), axis=2)
-        w01 = np.sum(a * b, axis=2)
-        w11 = np.sum(np.square(b), axis=2)
-        eq_b = -(w00 + w11)
-        eq_c = w00 * w11 - w01 * w01
-        eq_delta = np.sqrt(np.square(eq_b) - 4 * eq_c)
-        eq_x = (-eq_b + eq_delta) / 2
-        x = w11 - eq_x
-        y = -w01
-        k = 1 / np.sqrt(np.square(x) + np.square(y))
-        x *= k
-        y *= k
-        h, w = a.shape[:2]
-        result = np.concatenate(
-            [x.reshape(h, w, 1), y.reshape(h, w, 1)], axis=2)
-        assert np.isfinite(np.sum(result))
-        smooth_pca(result)
-        self.level_local_pca.append(result)
+    def __init__(self, pyr_list):
+        self.pyr_list = pyr_list
+        assert len(pyr_list) >= 2 and \
+            all(i.img_shape == pyr_list[0].img_shape for i in pyr_list)
+
 
 def next_pow2(n):
     v = 1
@@ -125,8 +68,12 @@ def avg_spectrum(frame, motion1d):
             cur_amps = amps[y:y+seg_size]
             amps_sum = np.sum(cur_amps, axis=0)
             cur_weight = np.sum(amps_sum) / cur_amps.size
-            cur_motion = np.sum(motion[y:y+seg_size] * cur_amps, axis=0) / \
-                amps_sum
+            cur_motion = np.sum(motion[y:y+seg_size] * cur_amps, axis=0)
+            cur_motion /= amps_sum
+            if False:
+                for i in range(y, y + seg_size, max(seg_size / 4, 1)):
+                    plot_val_with_fft(motion[i], show=False)
+                plot_val_with_fft(cur_motion)
             padded_arr[:cur_motion.size] = cur_motion
             fft = np.abs(np.fft.fft(padded_arr)[:final_fft_len]) * cur_weight
             if fft_sum is None:
