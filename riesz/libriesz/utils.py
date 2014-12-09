@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: utils.py
-# $Date: Sun Dec 07 16:54:34 2014 +0800
+# $Date: Mon Dec 08 00:21:00 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 import cv2
@@ -48,7 +48,7 @@ def plot_val_with_fft(data, sample_rate=1.0, cut_low=None, cut_high=None,
     ax = fig.add_subplot(2, 1, 1)
     ax.set_xlabel('t')
     ax.set_ylabel('y')
-    ax.plot(data)
+    ax.plot(np.arange(len(data)) / sample_rate, data)
     ax = fig.add_subplot(2, 1, 2)
     fft = np.fft.fft(data)
     freq = sample_rate / len(data) * np.arange(len(data))

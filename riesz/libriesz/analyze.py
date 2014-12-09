@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # $File: analyze.py
-# $Date: Sun Dec 07 17:22:32 2014 +0800
+# $Date: Tue Dec 09 10:10:40 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from .config import floatX
@@ -8,6 +8,7 @@ from .utils import plot_val_with_fft
 
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.signal import get_window
 
 from abc import ABCMeta, abstractmethod
 import logging
@@ -33,6 +34,12 @@ class Motion1DAnalyserBase(object):
         :param level: int, level index
         :return: motion map, amplitude map"""
 
+    def move_forward(self, new_pyr):
+        """move forward by adding a new pyramid"""
+        assert type(new_pyr) is type(self.pyr_list[0])
+        del self.pyr_list[1]
+        self.pyr_list.append(new_pyr)
+
     def __init__(self, pyr_list):
         self.pyr_list = pyr_list
         assert len(pyr_list) >= 2 and \
@@ -45,7 +52,7 @@ def next_pow2(n):
         v *= 2
     return v
 
-def avg_spectrum(frame, motion1d):
+def avg_spectrum(frame, motion1d, padding_size=32, window_type='hann'):
     """get average spectrum across all levels
     :return: amp, relative freq to sample_rate"""
     padded_width = None
@@ -53,14 +60,20 @@ def avg_spectrum(frame, motion1d):
     weight_sum = None
     expect_pad_len = None
     for level in range(motion1d.nr_level):
-        seg_size = 2 ** (motion1d.nr_level - level)
+        remain_size = 2 ** (motion1d.nr_level - level - 1)
+        seg_size = remain_size * 2
         motion, amp = motion1d.local_motion_map(frame, level)
         assert motion.shape == amp.shape and motion.ndim == 2
         amps = np.square(amp)
-        padded_arr = np.zeros(shape=next_pow2(motion.shape[1]), dtype=floatX)
+        del amp
+        padded_arr = np.zeros(
+            shape=next_pow2(motion.shape[1]) + padding_size * remain_size,
+            dtype=floatX)
+        window = get_window(window_type, padded_arr.size)
         if expect_pad_len is None:
             expect_pad_len = padded_arr.size
             final_fft_len = padded_arr.size / (2 ** motion1d.nr_level)
+            assert final_fft_len * remain_size * 2 == expect_pad_len
         else:
             assert expect_pad_len == padded_arr.size
         expect_pad_len /= 2
@@ -69,12 +82,14 @@ def avg_spectrum(frame, motion1d):
             amps_sum = np.sum(cur_amps, axis=0)
             cur_weight = np.sum(amps_sum) / cur_amps.size
             cur_motion = np.sum(motion[y:y+seg_size] * cur_amps, axis=0)
+            cur_motion *= window[:cur_motion.size]
             cur_motion /= amps_sum
-            if False:
-                for i in range(y, y + seg_size, max(seg_size / 4, 1)):
-                    plot_val_with_fft(motion[i], show=False)
-                plot_val_with_fft(cur_motion)
+            assert cur_motion.size == motion.shape[1]
             padded_arr[:cur_motion.size] = cur_motion
+            if False:
+                for i in range(y, y + seg_size, max(seg_size / 3, 1)):
+                    plot_val_with_fft(motion[i], show=False)
+                plot_val_with_fft(padded_arr)
             fft = np.abs(np.fft.fft(padded_arr)[:final_fft_len]) * cur_weight
             if fft_sum is None:
                 fft_sum = fft
