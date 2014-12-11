@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # $File: pyramid_quat.py
-# $Date: Sun Dec 07 16:18:12 2014 +0800
+# $Date: Wed Dec 10 23:34:22 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from .config import floatX
@@ -90,7 +90,6 @@ class RieszQuatPyramidBuilder(RieszPyramidBuilderBase):
 
 
 class PCAMotion1DAnalyser(Motion1DAnalyserBase):
-    __slots__ = Motion1DAnalyserBase.__slots__ + ['level_local_pca']
 
     def __init__(self, pyr_list):
         super(PCAMotion1DAnalyser, self).__init__(pyr_list)

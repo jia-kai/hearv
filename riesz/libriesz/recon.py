@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # $File: recon.py
-# $Date: Tue Dec 09 10:59:39 2014 +0800
+# $Date: Thu Dec 11 23:46:59 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from .config import floatX
@@ -28,8 +28,11 @@ class AudioRecon(object):
 
     amp_smooth = 0.3
 
-    window_name = 'hann'
+    window_name = 'triang'
     _window = None
+
+    _init_phase = None
+    _frame_num = 0
 
     def __init__(self, fps, sample_rate, target_energy, **kwarg):
         self._frame_length = 1.0 / fps
@@ -60,39 +63,40 @@ class AudioRecon(object):
         nr_sample = int(self._sample_rate * duration)
         if nr_sample % 2:
             nr_sample += 1
-        nr_sample_ext = int(round(self._sample_per_frame - self._tot_err))
-        assert abs(nr_sample_ext - self._sample_per_frame) < 1
-        self._tot_err += nr_sample_ext - self._sample_per_frame
 
         spectrum = np.zeros(shape=nr_sample, dtype=complex)
         assert freq[0] == 0
-        assert len(amp) * 2 <= spectrum.size
+        assert len(amp) * 2 < spectrum.size
         # discard DC
         amp = amp[1:]
         spectrum[1:len(amp)+1] = amp
-        # random phase
         s0 = spectrum[1:spectrum.size/2]
-        s0 *= np.exp(np.random.normal(scale=np.pi * 2, size=s0.size) * 1j)
+        if self._init_phase is None:
+            self._init_phase = np.random.normal(scale=np.pi * 2, size=s0.size)
+            self._phase_shift = np.arange(s0.size, dtype=floatX)
+            self._phase_shift *= -np.pi * 2 / s0.size
+        s0 *= np.exp((self._init_phase + self._phase_shift * self._loc) * 1j)
         spectrum[-len(s0):] = np.conjugate(s0)[::-1]
 
         recon = np.real(np.fft.ifft(spectrum))
         if self._window is None:
-            self._window = get_window(self.window_name, recon.size)
+            win_size = int(self._sample_per_frame * 2)
+            assert recon.size <= win_size
+            self._window = get_window(self.window_name, win_size)[:recon.size]
         #self._plot_window(recon)
-        #recon *= self._window
+        signal = np.tile(recon, 60)
+        from scipy.io import wavfile
+        wavfile.write('/tmp/singal.wav', 44100,
+                      (signal / np.max(np.abs(signal)) * 20000).astype('int16'))
+        plot_val_with_fft(signal, self._sample_rate)
+        recon *= self._window
         self._ensure_signal_size(recon.size)
-        d = recon.size - nr_sample_ext
-        assert d >= 0
-        if not self._loc:
-            self._signal[:recon.size] = recon
-        else:
-            s = self._loc - d / 2
-            self._signal[s:s+recon.size] += recon
-        self._loc += nr_sample_ext
-
-        plot_val_with_fft(recon, self._sample_rate, cut_high=1500, show=False)
-        plot_val_with_fft(self._signal[:self._loc], self._sample_rate,
-                          cut_high=1500)
+        self._signal[self._loc:self._loc+recon.size] += recon
+        self._frame_num += 1
+        self._loc = int(self._frame_num * self._sample_per_frame)
+        #print nr_sample, self._sample_per_frame
+        #plot_val_with_fft(recon, self._sample_rate, show=False)
+        #plot_val_with_fft(self._signal[:self._loc], self._sample_rate)
 
     def _plot_window(self, signal):
         plot_val_with_fft(signal, self._sample_rate, cut_high=1500, cut_low=100,

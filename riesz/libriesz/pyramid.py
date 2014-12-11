@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # $File: pyramid.py
-# $Date: Sun Dec 07 20:44:20 2014 +0800
+# $Date: Wed Dec 10 23:34:53 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from .config import floatX
@@ -35,7 +35,7 @@ class RieszPyramidBuilderBase(object):
 
     min_pyr_img_size = 10
     min_pyr_scale = 0
-    max_pyr_scale = 3
+    max_pyr_scale = 2
     spatial_blur = 0.5
     spatial_ksize = (3, 3)
 
@@ -121,12 +121,9 @@ class RieszPyramidBuilder(RieszPyramidBuilderBase):
 
 
 class PhaseDiffMotion1DAnalyser(Motion1DAnalyserBase):
-    def __init__(self, pyr_list):
-        super(PhaseDiffMotion1DAnalyser, self).__init__(pyr_list)
-
-    def local_motion_map(self, frame, level):
-        v0 = self.pyr_list[0].levels[level]
-        v1 = self.pyr_list[frame].levels[level]
+    def _local_motion_map(self, frame_idx, level):
+        v0 = self.ref.levels[level]
+        v1 = self.pyr_list[frame_idx].levels[level]
         regularize_orient(v1, v0)
         pd = v1[:, :, 2] - v0[:, :, 2]
         amp = (v1[:, :, 0] + v0[:, :, 0]) / 2

@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: utils.py
-# $Date: Mon Dec 08 00:21:00 2014 +0800
+# $Date: Thu Dec 11 21:41:13 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 import cv2
@@ -41,7 +41,7 @@ def get_riesz_pyr_with_cache(fpath, use_quat=False):
         pickle.dump(obj, fout, pickle.HIGHEST_PROTOCOL)
     return obj
 
-def plot_val_with_fft(data, sample_rate=1.0, cut_low=None, cut_high=None,
+def plot_val_with_fft(data, sample_rate=1.0, cut_low=None, cut_high=2000,
                       output=None, show=True):
     sample_rate = float(sample_rate)
     fig = plt.figure()

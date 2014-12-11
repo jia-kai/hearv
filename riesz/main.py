@@ -1,11 +1,11 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: main.py
-# $Date: Tue Dec 09 10:41:35 2014 +0800
+# $Date: Fri Dec 12 00:08:53 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from libriesz.utils import get_riesz_pyr_with_cache, plot_val_with_fft
-from libriesz.analyze import avg_spectrum
+from libriesz.analyze import AvgSpectrum
 from libriesz.recon import AudioRecon
 
 import matplotlib.pyplot as plt
@@ -34,6 +34,10 @@ def main():
     parser.add_argument('--disp', action='store_true',
                         help='display spectrum for each frame (enabled when'
                         ' recon not supplied)')
+    parser.add_argument('--nr_adj_frame', type=int, default=1,
+                        help='number of adjacent frames to be used')
+    parser.add_argument('--frame_duration_scale', type=float, default=1,
+                        help='scale frame duration for spectrum analysis')
     parser.add_argument('img', nargs='+')
     args = parser.parse_args()
 
@@ -48,17 +52,22 @@ def main():
         recon = None
 
     sample_rate = 1.0 / args.line_delay
-    for i in range(1, len(args.img)):
+    avg_spectrum = AvgSpectrum(
+        args.nr_adj_frame, 1 / args.line_delay)
+        #1 / args.fps * args.frame_duration_scale)
+
+    for i in range(1, len(args.img) - args.nr_adj_frame + 1):
         logger.info('frame {}'.format(i))
-        if i >= win_length:
-            motion1d.move_forward(get_riesz_pyr_with_cache(args.img[i]))
-        amp, freq = avg_spectrum(min(i, win_length - 1), motion1d)
-        freq *= sample_rate
+        amp, freq = avg_spectrum(motion1d, i)
+        if i + 1 < len(args.img):
+            motion1d.add_frame(get_riesz_pyr_with_cache(args.img[i + 1]))
         cut_low = min(np.nonzero(freq >= args.cut_low)[0])
         amp[:cut_low] = 0
-        avg = np.mean(sorted(amp)[len(amp)/4:-len(amp)/4])
-        amp = np.clip(amp - avg, 0, np.max(amp))
-        amp = np.power(60, amp)
+        if False:
+            avg = np.mean(sorted(amp)[len(amp)/4:-len(amp)/4])
+            amp = np.clip(amp - avg, 0, np.max(amp))
+            amp = np.power(1000, amp)
+            amp *= 60 / np.max(amp) # XXX
         if i == 1:
             logger.info('freq_resolution={}'.format(i, freq[1] - freq[0]))
         if not recon or args.disp:
