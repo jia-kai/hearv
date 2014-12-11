@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: main.py
-# $Date: Fri Dec 12 00:08:53 2014 +0800
+# $Date: Fri Dec 12 01:16:27 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from libriesz.utils import get_riesz_pyr_with_cache, plot_val_with_fft
@@ -63,7 +63,7 @@ def main():
             motion1d.add_frame(get_riesz_pyr_with_cache(args.img[i + 1]))
         cut_low = min(np.nonzero(freq >= args.cut_low)[0])
         amp[:cut_low] = 0
-        if False:
+        if True:
             avg = np.mean(sorted(amp)[len(amp)/4:-len(amp)/4])
             amp = np.clip(amp - avg, 0, np.max(amp))
             amp = np.power(1000, amp)
@@ -77,7 +77,7 @@ def main():
             plt.plot(freq[cut_low:cut_high], amp[cut_low:cut_high])
             plt.show()
         if recon:
-            recon.add(freq, amp)
+            recon.add(freq.copy(), amp.copy()) #XXX
 
     if recon:
         signal = recon.get_signal()
