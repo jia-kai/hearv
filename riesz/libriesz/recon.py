@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # $File: recon.py
-# $Date: Fri Dec 12 01:17:40 2014 +0800
+# $Date: Fri Dec 12 09:33:44 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from .config import floatX
@@ -157,13 +157,14 @@ class AudioReconOverlap(AudioReconBase):
 
 class AudioReconFreqInterpolate(AudioReconBase):
     interp = 'loglinear'
+    window_name = 'hann'
     def add(self, freq, amp):
         amp = self._smoothed_amp(amp)
         res = freq[1] - freq[0]
         duration = 1 / res
         assert freq[-1] <= self._sample_rate / 2
 
-        nr_sample = int(self._sample_per_frame)
+        nr_sample = int(self._sample_per_frame) * 2
         if nr_sample % 2:
             nr_sample += 1
 
@@ -196,6 +197,9 @@ class AudioReconFreqInterpolate(AudioReconBase):
         spectrum[-len(s0):] = np.conjugate(s0)[::-1]
 
         recon = self._smoothed_recon(np.real(np.fft.ifft(spectrum)))
+        if self._window is None:
+            self._window = get_window(self.window_name, recon.size)
+        recon *= self._window
         
         if False:
             plot_val_with_fft(recon, self._sample_rate, show=False)
@@ -206,8 +210,10 @@ class AudioReconFreqInterpolate(AudioReconBase):
                            20000).astype('int16'))
             plot_val_with_fft(signal, self._sample_rate)
         self._ensure_signal_size(recon.size)
-        self._signal[self._loc:self._loc+nr_sample] = recon
-        self._loc += nr_sample
-        #plot_val_with_fft(self._signal[:self._loc], self._sample_rate)
+        self._signal[self._loc:self._loc+nr_sample] += recon
+        self._loc += nr_sample / 2
+        #plot_val_with_fft(recon, self._sample_rate, show=False)
+        #plot_val_with_fft(self._signal[:self._loc+nr_sample/2],
+        #                  self._sample_rate)
 
 AudioRecon = AudioReconFreqInterpolate

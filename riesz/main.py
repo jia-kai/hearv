@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: main.py
-# $Date: Fri Dec 12 01:16:27 2014 +0800
+# $Date: Sat Dec 13 00:30:28 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from libriesz.utils import get_riesz_pyr_with_cache, plot_val_with_fft
@@ -20,10 +20,10 @@ def main():
     parser = argparse.ArgumentParser(
         description='analyze audio from video',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--line_delay', type=float, default=15e-6)
+    parser.add_argument('--line_delay', type=float, default=15.7e-6)
     parser.add_argument('--cut_low', type=float, default=100)
     parser.add_argument('--cut_high', type=float, default=2000)
-    parser.add_argument('--frame_win_length', type=int, default=10,
+    parser.add_argument('--frame_win_length', type=int, default=2,
                         help='frame window length for analysing')
     parser.add_argument('--fps', type=float, default=59.940)
     parser.add_argument('--recon', help='path for reconstruction output')
@@ -63,7 +63,7 @@ def main():
             motion1d.add_frame(get_riesz_pyr_with_cache(args.img[i + 1]))
         cut_low = min(np.nonzero(freq >= args.cut_low)[0])
         amp[:cut_low] = 0
-        if True:
+        if False:
             avg = np.mean(sorted(amp)[len(amp)/4:-len(amp)/4])
             amp = np.clip(amp - avg, 0, np.max(amp))
             amp = np.power(1000, amp)
