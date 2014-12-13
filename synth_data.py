@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: synth_data.py
-# $Date: Sun Dec 07 00:04:23 2014 +0800
+# $Date: Sat Dec 13 23:20:47 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 import cv2
@@ -15,15 +15,18 @@ logging.basicConfig(level=logging.INFO)
 def gen_frame(start_time, args):
     # f(x, y) = sin(x + shift(t0 + dy)) + sin(y)
     start_line = start_time / args.line_delay
-    dx_pxl = None
-    for freq, amp in zip(args.freq, args.amp):
-        prd_nr_line = 1.0 / freq / args.line_delay
-        k = np.pi * 2 / prd_nr_line
-        cur = np.sin(start_line + np.arange(args.img_size) * k) * amp
-        if dx_pxl is None:
-            dx_pxl = cur
-        else:
-            dx_pxl += cur
+    if start_time == -1:
+        dx_pxl = np.zeros(args.img_size)
+    else:
+        dx_pxl = None
+        for freq, amp in zip(args.freq, args.amp):
+            prd_nr_line = 1.0 / freq / args.line_delay
+            k = np.pi * 2 / prd_nr_line
+            cur = np.sin((start_line + np.arange(args.img_size)) * k) * amp
+            if dx_pxl is None:
+                dx_pxl = cur
+            else:
+                dx_pxl += cur
     pat_w = np.pi * 2 / args.pattern_period
     x0 = np.arange(args.img_size)
     v0 = np.add.outer(dx_pxl, x0)
@@ -43,8 +46,8 @@ def main():
     parser.add_argument('--nr_frame', type=int, required=True)
     parser.add_argument('--noise', type=float, default=1.0,
                         help='noise added to individual pixels')
-    parser.add_argument('--line_delay', type=float, default=18e-6)
-    parser.add_argument('--fps', type=float, default=60.0)
+    parser.add_argument('--line_delay', type=float, default=15.93e-6)
+    parser.add_argument('--fps', type=float, default=59.940)
     parser.add_argument('--pattern_period', type=float, default=20,
                         help='period of patterns on image')
     parser.add_argument('--freq', type=float, default=[500], nargs='*',
@@ -65,12 +68,15 @@ def main():
 
     frame_time = 1 / args.fps
     sp_time = args.img_size * args.line_delay
-    logger.info('sample_time={:.3e}  frame_duration={:.3e}; k={:.3f}'.format(
+    logger.info('sample_during={:.3e}  frame_duration={:.3e}; k={:.3f}'.format(
         sp_time, frame_time, sp_time / frame_time))
     assert frame_time >= sp_time
 
-    for i in range(args.nr_frame):
-        frame = gen_frame(i * frame_time, args)
+    for i in range(args.nr_frame + 1):
+        if not i:
+            frame = gen_frame(-1, args)
+        else:
+            frame = gen_frame(i * frame_time, args)
         fpath = '{}-{:02}.png'.format(args.output, i)
         cv2.imwrite(fpath, frame)
     with open('{}-args.txt'.format(args.output), 'w') as fout:

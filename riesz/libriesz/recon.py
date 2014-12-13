@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # $File: recon.py
-# $Date: Fri Dec 12 09:33:44 2014 +0800
+# $Date: Sat Dec 13 21:22:56 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from .config import floatX
@@ -201,7 +201,7 @@ class AudioReconFreqInterpolate(AudioReconBase):
             self._window = get_window(self.window_name, recon.size)
         recon *= self._window
         
-        if False:
+        if True:
             plot_val_with_fft(recon, self._sample_rate, show=False)
             signal = np.tile(recon, 60)
             from scipy.io import wavfile

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # $File: analyze.py
-# $Date: Fri Dec 12 00:16:27 2014 +0800
+# $Date: Sun Dec 14 00:38:26 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from .config import floatX
@@ -97,6 +97,8 @@ def find_optimal_fft_size(val):
         val = v0 + 1
 
 class AvgSpectrum(object):
+    EPS = np.finfo(floatX).tiny
+
     _nr_adj_frame = None
     _sample_rate = None
     _target_duration = None
@@ -177,7 +179,7 @@ class AvgSpectrum(object):
         amps = [np.square(i[1]) for i in frames]
         signal = np.empty(shape=nr_sample, dtype=floatX)
         window = None
-        for y in range(0, frames[0][0].shape[1], self.vert_group_size):
+        for y in range(0, amps[0].shape[0], self.vert_group_size):
             all_weight = []
             signal.fill(0)
             for fidx in range(len(frames)):
@@ -190,7 +192,7 @@ class AvgSpectrum(object):
                 xnext = (fidx + 1) * nr_sample / len(frames)
                 assert xnext >= x1
                 cur_motion = np.sum(motion[fidx][y:y+self.vert_group_size] *
-                                    cur_amps, axis=0) / amps_sum
+                                    cur_amps, axis=0) / (amps_sum + self.EPS)
                 while x1 < xnext:
                     signal[x1 - cur_motion.size:x1] = cur_motion
                     x1 += cur_motion.size

@@ -1,10 +1,9 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: utils.py
-# $Date: Thu Dec 11 21:41:13 2014 +0800
+# $Date: Sat Dec 13 21:45:50 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
-import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -14,32 +13,32 @@ import cPickle as pickle
 
 logger = logging.getLogger(__name__)
 
-def get_riesz_pyr_with_cache(fpath, use_quat=False):
-    from .pyramid_quat import RieszQuatPyramidBuilder, RieszQuatPyramid
-    from .pyramid import RieszPyramidBuilder, RieszPyramid
-    if use_quat:
-        builder = RieszQuatPyramidBuilder()
-        pyrclass = RieszQuatPyramid
-    else:
-        builder = RieszPyramidBuilder()
-        pyrclass = RieszPyramid
-    pyr_fpath = fpath[:fpath.rfind('.')] + '-rieszpyr.pkl'
-    if os.path.isfile(pyr_fpath):
-        logger.info('load cached pyr from {}'.format(pyr_fpath))
-        with open(pyr_fpath) as fin:
-            obj = pickle.load(fin)
-        assert isinstance(obj, pyrclass)
+class CachedResult(object):
+    enabled = True
+    _cache_dir = None
+
+    def __init__(self, cache_type, getter, cache_dir=None):
+        """:param getter: callabel that map key to value"""
+        self._type = cache_type
+        self._getter = getter
+        self._cache_dir = cache_dir
+
+    def __call__(self, key):
+        if not self.enabled:
+            return self._getter(key)
+
+        cache_fpath = '{}-{}.pkl'.format(key, self._type)
+        if self._cache_dir:
+            cache_fpath = os.path.join(self._cache_dir, cache_fpath)
+        if os.path.isfile(cache_fpath):
+            logger.info('load cache from {}'.format(cache_fpath))
+            with open(cache_fpath) as fin:
+                obj = pickle.load(fin)
+            return obj
+        obj = self._getter(key)
+        with open(cache_fpath, 'w') as fout:
+            pickle.dump(obj, fout, pickle.HIGHEST_PROTOCOL)
         return obj
-    logger.info('computing riesz pyramid: fpath={} builder={} pyr={}'.format(
-        fpath, type(builder).__name__, pyrclass.__name__))
-    img = cv2.imread(fpath, cv2.CV_LOAD_IMAGE_GRAYSCALE)
-    assert img is not None, 'failed to read {}'.format(fpath)
-    img = img.T
-    obj = builder(img)
-    assert isinstance(obj, pyrclass)
-    with open(pyr_fpath, 'w') as fout:
-        pickle.dump(obj, fout, pickle.HIGHEST_PROTOCOL)
-    return obj
 
 def plot_val_with_fft(data, sample_rate=1.0, cut_low=None, cut_high=2000,
                       output=None, show=True):
