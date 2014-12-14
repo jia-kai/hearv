@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # $File: analyze.py
-# $Date: Sun Dec 14 00:38:26 2014 +0800
+# $Date: Sun Dec 14 19:46:34 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from .config import floatX
@@ -8,7 +8,6 @@ from .utils import plot_val_with_fft
 
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.signal import get_window
 
 from abc import ABCMeta, abstractmethod
 import logging
@@ -47,7 +46,7 @@ class Motion1DAnalyserBase(object):
         """:param frame_idx: the actual idx in self.pyr_list"""
         pass
 
-    def local_motion_map(self, frame_idx, level):
+    def __call__(self, frame_idx, level):
         """get local motion map for every pixel at specific level and frame
             index
         :param frame: int, frame index
@@ -105,7 +104,6 @@ class AvgSpectrum(object):
 
     _last_level_nr_sample = None
 
-    window_type = 'hann'
     vert_group_size = 6
     """size of vertical group"""
 
@@ -123,7 +121,7 @@ class AvgSpectrum(object):
 
     def __call__(self, motion_ana, frame_idx):
         # nr_sample in last level
-        ll_nr_sample = motion_ana.local_motion_map(
+        ll_nr_sample = motion_ana(
             frame_idx, motion_ana.nr_level - 1)[0].shape[1]
         sample_rate = self._sample_rate / (2 ** (motion_ana.nr_level - 1))
         if self._real_sample_rate is None:
@@ -144,18 +142,20 @@ class AvgSpectrum(object):
                     self._last_level_nr_sample = padded_width
                 assert self._last_level_nr_sample == padded_width
             else:
-                padded_width = find_optimal_fft_size(tgt_ll_nr_sample)
+                padded_width = find_optimal_fft_size(
+                    tgt_ll_nr_sample * self._nr_adj_frame)
                 self._last_level_nr_sample = padded_width
+            nopadding_width = ll_nr_sample * self._nr_adj_frame
             logger.info('padding ratio: {}/{}={}'.format(
-                padded_width, ll_nr_sample,
-                float(padded_width) / ll_nr_sample))
+                padded_width, nopadding_width,
+                float(padded_width) / nopadding_width))
 
         padded_width = self._last_level_nr_sample
         padded_width *= 2 ** (motion_ana.nr_level - 1)
         spec_sum = None
         weight_sum = None
         for level in range(motion_ana.nr_level):
-            frames = [motion_ana.local_motion_map(frame_idx + i, level)
+            frames = [motion_ana(frame_idx + i, level)
                       for i in range(self._nr_adj_frame)]
             for spec, weight in self._analyze_one_scale(frames, padded_width):
                 weight = float(weight)
@@ -182,82 +182,176 @@ class AvgSpectrum(object):
         for y in range(0, amps[0].shape[0], self.vert_group_size):
             all_weight = []
             signal.fill(0)
+            x0 = 0
             for fidx in range(len(frames)):
                 cur_amps = amps[fidx][y:y+self.vert_group_size]
                 amps_sum = np.sum(cur_amps, axis=0)
                 assert amps_sum.ndim == 1
                 all_weight.append(np.sum(amps_sum) / cur_amps.size)
-                x0 = fidx * nr_sample / len(frames)
                 x1 = x0 + amps_sum.size
-                xnext = (fidx + 1) * nr_sample / len(frames)
-                assert xnext >= x1
                 cur_motion = np.sum(motion[fidx][y:y+self.vert_group_size] *
                                     cur_amps, axis=0) / (amps_sum + self.EPS)
-                while x1 < xnext:
-                    signal[x1 - cur_motion.size:x1] = cur_motion
-                    x1 += cur_motion.size
-                x1 -= cur_motion.size
-                if x1 - x0 > cur_motion.size:
-                    logger.warn('duplicate signal')
-                if window is None:
-                    window = get_window(self.window_type, x1 - x0)
-                signal[x0:x1] *= window
+                signal[x0:x1] = cur_motion
+                x0 = x1
                 #plot_val_with_fft(cur_motion, self._sample_rate, show=False)
-                #plot_val_with_fft(signal, self._sample_rate)
+            if window is None:
+                window = RawSpectrogram.make_window(x0)
+            signal[:x0] *= window
+            #plot_val_with_fft(signal, self._sample_rate)
             cur_weight = np.mean(all_weight)
             fft_amp = np.abs(np.fft.fft(signal)[:self._last_level_nr_sample/2])
             yield fft_amp, cur_weight
 
+class RawSpectrogram(object):
+    _window = None
+    _step = None
+    def __init__(self, length, step, win_type='hamming'):
+        step = int(step)
+        assert step > 0
+        self._step = step
+        self._window = self.make_window(length, win_type)
 
-def avg_spectrum(frame_idx, motion1d, padding_size=32, window_type='hann'):
-    """get average spectrum across all levels; 
-    :return: amp, relative freq to sample_rate"""
-    padded_width = None
-    fft_sum = None
-    weight_sum = None
-    expect_pad_len = None
-    for level in range(motion1d.nr_level):
-        remain_size = 2 ** (motion1d.nr_level - level - 1)
-        seg_size = 6
-        motion, amp = motion1d.local_motion_map(frame_idx, level)
-        assert motion.shape == amp.shape and motion.ndim == 2
-        amps = np.square(amp)
-        del amp
-        padded_arr = np.zeros(
-            shape=next_pow2(motion.shape[1]) + padding_size * remain_size,
-            dtype=floatX)
-        window = get_window(window_type, padded_arr.size)
-        if expect_pad_len is None:
-            expect_pad_len = padded_arr.size
-            final_fft_len = padded_arr.size / (2 ** motion1d.nr_level)
-            assert final_fft_len * remain_size * 2 == expect_pad_len
+    @classmethod
+    def make_window(cls, length, win_type='hamming'):
+        length = int(length)
+        assert length % 4 == 0, \
+            'length must be multiple of 4 for scaled window'
+        if win_type == 'hamming':
+            a = 0.54
+            b = -0.46
         else:
-            assert expect_pad_len == padded_arr.size
-        expect_pad_len /= 2
-        for y in range(0, motion.shape[0], seg_size):
-            cur_amps = amps[y:y+seg_size]
-            amps_sum = np.sum(cur_amps, axis=0)
-            cur_weight = np.sum(amps_sum) / cur_amps.size
-            cur_motion = np.sum(motion[y:y+seg_size] * cur_amps, axis=0)
-            cur_motion *= window[:cur_motion.size]
-            cur_motion /= amps_sum
-            assert cur_motion.size == motion.shape[1]
-            padded_arr[:cur_motion.size] = cur_motion
-            if False:
-                for i in range(y, y + seg_size, max(seg_size / 3, 1)):
-                    plot_val_with_fft(motion[i], show=False)
-                plot_val_with_fft(padded_arr)
-            fft = np.abs(np.fft.fft(padded_arr)[:final_fft_len]) * cur_weight
-            if fft_sum is None:
-                fft_sum = fft
-                weight_sum = cur_weight
-            else:
-                fft_sum += fft
-                weight_sum += cur_weight
+            assert win_type == 'hanning'
+            a = 0.5
+            b = -0.5
 
-    assert final_fft_len == expect_pad_len
-    fft = fft_sum / weight_sum
-    k = final_fft_len * 2 * (2 ** (motion1d.nr_level - 1))
-    freq = np.arange(len(fft), dtype=floatX) / k
-    assert freq[-1] < 0.5
-    return fft, freq
+        x = np.arange(length, dtype=floatX) * 2 + 1
+        x *= np.pi / length
+        w = a + np.cos(x) * b
+        w /= np.sqrt(4 * a * a + 2 * b * b)
+
+        # check for normalization
+        step = length / 4
+        for i in range(length):
+            p = i
+            while p >= step:
+                p -= step
+            s = 0
+            while p < length:
+                s += w[p] * w[p]
+                p += step
+            assert abs(s - 1) < 1e-5
+
+        return w
+
+    def __call__(self, signal, nr_time=None):
+        """return: 2D matrix indexed by (time, frequency)"""
+        assert signal.ndim == 1 and signal.size >= self._window.size
+        if nr_time is None:
+            nr_time = (signal.size - self._window.size) / self._step + 1
+        result = np.empty((nr_time, self._window.size), dtype=floatX)
+        pos = 0
+        for i in range(nr_time):
+            p = i * self._step
+            sub = signal[p:p+self._window.size]
+            result[i] = np.abs(np.fft.fft(sub * self._window))
+        return result
+
+    @property
+    def win_size(self):
+        return self._window.size
+
+
+class AdjSTFT(object):
+    """short-time fourier transform for adjacent frams"""
+
+    EPS = np.finfo(floatX).tiny
+
+    _sample_rate = None
+    _step_factor = None
+    """step size relative to window length"""
+
+    _nr_spec_per_frame = None
+    """number of time points for spectrogram for each frame"""
+
+    _get_spectrogram = None
+    """list of :class:`RawSpectrogram` objects to calculate spectrogram for
+        each scale"""
+
+    _ll_nr_sample = None
+    """number of samples in last level"""
+
+    _ll_sample_rate = None
+    """sample rate in last level"""
+
+    vert_group_size = 6
+    """size of vertical group"""
+
+    def __init__(self, sample_rate, target_duration):
+        """:param sample_rate: sample rate for level0
+        :param target_duration: duration for each frame"""
+        self._sample_rate = float(sample_rate)
+        self._step_factor = 0.25 / (target_duration * self._sample_rate)
+
+    def __call__(self, motion_ana, frame_idx):
+        if self._get_spectrogram is None:
+            self._get_spectrogram = []
+            self._step_factor *= motion_ana(frame_idx, 0)[0].shape[0]
+            self._nr_spec_per_frame = int(1 / self._step_factor)
+            logger.info('stretch={} nr_spec_per_frame={}'.format(
+                0.25 / self._step_factor, self._nr_spec_per_frame))
+            for level in range(motion_ana.nr_level):
+                win_size = motion_ana(frame_idx, level)[0].shape[1]
+                step = int(win_size * self._step_factor)
+                logger.info('level {}: spectrogram '
+                            'win_size={} step={}'.format(level, win_size, step))
+                assert step * self._nr_spec_per_frame <= win_size
+                self._get_spectrogram.append(RawSpectrogram(win_size, step))
+            self._ll_nr_sample = self._get_spectrogram[-1].win_size
+            self._ll_sample_rate = self._sample_rate / (
+                2 ** (motion_ana.nr_level - 1))
+            logger.info('usable sample rate: {}'.format(self._ll_sample_rate))
+
+        spec_sum = None
+        weight_sum = None
+        for level in range(motion_ana.nr_level):
+            frames = [motion_ana(frame_idx + i, level) for i in range(2)]
+            for spec, weight in self._analyze_one_scale(
+                    frames, self._get_spectrogram[level]):
+                weight = float(weight)
+                spec *= weight
+                if spec_sum is None:
+                    spec_sum = spec.copy()
+                    weight_sum = weight
+                else:
+                    spec_sum += spec
+                    weight_sum += weight
+
+        spec_sum /= weight_sum
+        N = self._ll_nr_sample / 2
+        assert spec_sum.shape[1] == N
+        freq = np.arange(N, dtype=floatX)
+        freq *= self._ll_sample_rate / (N * 2)
+        return spec_sum, freq
+
+    def _analyze_one_scale(self, frames, spectrogram):
+        assert len(frames) == 2
+        motion = [i[0] for i in frames]
+        amps = [np.square(i[1]) for i in frames]
+        signal = np.empty(shape=spectrogram.win_size*2, dtype=floatX)
+        for y in range(0, amps[0].shape[0], self.vert_group_size):
+            all_weight = []
+            signal.fill(0)
+            x0 = 0
+            for fidx in range(len(frames)):
+                cur_amps = amps[fidx][y:y+self.vert_group_size]
+                amps_sum = np.sum(cur_amps, axis=0)
+                assert amps_sum.ndim == 1
+                all_weight.append(np.sum(amps_sum) / cur_amps.size)
+                x1 = x0 + amps_sum.size
+                cur_motion = np.sum(motion[fidx][y:y+self.vert_group_size] *
+                                    cur_amps, axis=0) / (amps_sum + self.EPS)
+                signal[x0:x1] = cur_motion
+                x0 = x1
+            cur_weight = np.mean(all_weight)
+            cur_spec = spectrogram(signal, nr_time=self._nr_spec_per_frame)
+            yield cur_spec[:, :self._ll_nr_sample/2], cur_weight

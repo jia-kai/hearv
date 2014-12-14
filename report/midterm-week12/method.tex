@@ -1,5 +1,5 @@
 % $File: method.tex
-% $Date: Sat Dec 13 21:03:06 2014 +0800
+% $Date: Sun Dec 14 00:44:50 2014 +0800
 % $Author: jiakai <jia.kai66@gmail.com>
 
 \section{算法原理}
@@ -163,6 +163,13 @@ $\theta_0=\theta_{1s}$对$F_2$平滑得到$F_{2s}$，使得$\theta_{2s}$与$\the
     \left(\frac{A_{1s}(x, y) + A_{2s}(x, y)}{2}\right)^2(\phi_{2s}(x, y) -
     \phi_{1s}(x, y))
 \end{equation}
+
+另外，在基于视频进行运动恢复的情况下，
+我们也尝试了其它的消除$(\phi, \theta)$和$(-\phi, \theta+\pi)$歧义的方法。
+取二元组$Q=(\phi\sin(\theta), \phi\cos(\theta))$，则$Q$是不存在这种歧义的，
+但每个点的运动信号都变成了二维。于是对每个点，可取出其在各帧的$Q$值，
+进行主分量分析(PCA)投影到一维，得到该点的一维运动信号。
+但实验发现这种方法效果并不好。
 
 % f}}}
 

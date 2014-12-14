@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # $File: pyramid.py
-# $Date: Wed Dec 10 23:34:53 2014 +0800
+# $Date: Sun Dec 14 16:41:20 2014 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from .config import floatX
@@ -76,11 +76,8 @@ class RieszPyramidBuilder(RieszPyramidBuilderBase):
         """
         assert img.ndim == 2
         img = img.astype(floatX)
-        r1 = signal.convolve2d(img, self.riesz_kernel, mode='valid')
-        r2 = signal.convolve2d(img, self.riesz_kernel.T, mode='valid')
-        kh, kw = self.riesz_kernel.shape
-        assert kh % 2 == 1 and kw % 2 == 1 and kh == kw
-        img = img[kh/2:-(kh/2), kw/2:-(kw/2)]
+        r1 = signal.convolve2d(img, self.riesz_kernel, mode='same')
+        r2 = signal.convolve2d(img, self.riesz_kernel.T, mode='same')
         amp = np.sqrt(np.square(img) + np.square(r1) + np.square(r2))
         phase = np.arccos(img / (amp + self.EPS))
         t = amp * np.sin(phase) + self.EPS
