@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # $File: recon.py
-# $Date: Mon Dec 15 00:19:47 2014 +0800
+# $Date: Sat Jan 03 01:00:45 2015 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from .config import floatX
@@ -209,7 +209,7 @@ class AudioRecon(object):
     _sample_rate = None
     _window = None
 
-    _max_nr_iter = 800
+    max_nr_iter = 800
 
     _prev_amp = None
     _all_amp = None
@@ -267,7 +267,7 @@ class AudioRecon(object):
         time_grid = range(0, signal.size - N + 1, step)
         all_amp = self._get_interpolated_all_amp(time_grid)
         all_amp = [np.concatenate((i, [0], i[1:][::-1])) for i in all_amp]
-        for iter_idx in range(self._max_nr_iter):
+        for iter_idx in range(self.max_nr_iter):
             err = 0
             signal_next = np.zeros_like(signal)
             for i, amp in zip(time_grid, all_amp):

@@ -1,6 +1,6 @@
 #!/bin/bash -e
 # $File: extract_img.sh
-# $Date: Sat Dec 06 00:29:40 2014 +0800
+# $Date: Sat Jan 03 00:24:00 2015 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 video=$1
@@ -18,4 +18,4 @@ fi
 mkdir $output
 
 ffmpeg -ss $start -t $duration -i $video -vn -acodec pcm_s16le "${output}.wav"
-ffmpeg -ss $start -t $duration -i $video -f image2 "$output/image-%03d.png"
+ffmpeg -ss $start -t $duration -i $video $EXTRA_OPT -f image2 "$output/image-%04d.png"

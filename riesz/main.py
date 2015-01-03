@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: main.py
-# $Date: Mon Dec 15 00:16:32 2014 +0800
+# $Date: Sat Jan 03 01:06:50 2015 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from libriesz.utils import CachedResult, plot_val_with_fft
@@ -50,12 +50,15 @@ def main():
         description='analyze audio from video',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--line_delay', type=float, default=15.93e-6)
-    parser.add_argument('--cut_low', type=float, default=300)
-    parser.add_argument('--cut_high', type=float, default=1000)
+    parser.add_argument('--cut_low', type=float, default=150,
+                        help='low freq cutoff')
+    parser.add_argument('--cut_high', type=float, default=1000,
+                        help='high freq cutoff')
     parser.add_argument('--frame_win_length', type=int, default=1,
                         help='frame window length for analysing')
     parser.add_argument('--fps', type=float, default=59.940)
     parser.add_argument('--recon', help='path for reconstruction output')
+    parser.add_argument('--recon_nr_iter', type=int)
     parser.add_argument('--target_energy', type=float, default=0.2,
                         help='target energy for reconstruction output')
     parser.add_argument('--disp', action='store_true',
@@ -69,7 +72,9 @@ def main():
     parser.add_argument('--frame_duration_scale', type=float, default=1,
                         help='scale frame duration for spectrum analysis')
     parser.add_argument('--disable_spectrum_cache', action='store_true')
-    parser.add_argument('--noise_frame', type=int, default=5)
+    parser.add_argument('--force_spectrum_cache', action='store_true')
+    parser.add_argument('--noise_frame', type=int, default=5,
+                        help='number of frames used for noise sampling')
     parser.add_argument('img', nargs='+')
     args = parser.parse_args()
 
@@ -83,6 +88,8 @@ def main():
 
     if args.recon:
         recon = AudioRecon(1 / args.fps)
+        if args.recon_nr_iter:
+            recon.max_nr_iter = args.recon_nr_iter
     else:
         recon = None
 
@@ -100,9 +107,11 @@ def main():
     for i in range(1, len(args.img) - args.nr_adj_frame + 1):
         logger.info('frame {}'.format(i))
         amp, freq = avg_spectrum(i)
-        if i + 1 < len(args.img):
+        if i + 1 < len(args.img) and not args.force_spectrum_cache:
             motion_ana.add_frame(get_riesz_pyr(args.img[i + 1]))
+
         if i - 1 < args.noise_frame:
+            logger.info('used as noise sample')
             noise_spec.append(amp)
             continue
         elif i - 1 == args.noise_frame:
