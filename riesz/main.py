@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: main.py
-# $Date: Sat Jan 03 01:06:50 2015 +0800
+# $Date: Sat Jan 03 22:36:01 2015 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from libriesz.utils import CachedResult, plot_val_with_fft
@@ -14,6 +14,7 @@ import cv2
 import numpy as np
 from scipy.io import wavfile
 
+import json
 import os
 import argparse
 import logging
@@ -45,6 +46,56 @@ class CachedFrameSpectrum(CachedResult):
     def _getter(self, fidx):
         return self.avg_spectrum(self.motion_ana, fidx)
 
+class ReconProcJsonLogger(object):
+    def __init__(self, fpath, video_link):
+        self.frames = []
+        self.glbl = []
+        self.frame_mag_range = [float('inf'), float('-inf')]
+        self.glbl_sig_range = [float('inf'), float('-inf')]
+        self.fpath = fpath
+        self.video_link = video_link
+
+    def __del__(self):
+        logger.info('save recon process json to {}'.format(self.fpath))
+        with open(self.fpath, 'w') as fout:
+            json.dump(self.get_json_obj(), fout)
+
+    def _update_range(self, t, v):
+        min0, max0 = t
+        t[:] = map(float, [min(np.min(v), min0), max(np.max(v), max0)])
+
+
+    def add_frame(self, freq, mag, t, y):
+        self.frame_freq = freq
+        self.frames.append({
+            'spectrum': mag.tolist(),
+            'signal': zip(t.tolist(), y.tolist())
+        })
+        self._update_range(self.frame_mag_range, mag)
+
+    def add_global_opt(self, iter_idx, t, y):
+        self.glbl_time = t
+        self.glbl.append({
+            'iter': iter_idx,
+            'signal': y.tolist()
+        })
+        self._update_range(self.glbl_sig_range, y)
+
+    def get_json_obj(self):
+        return {
+            'frames': self.frames,
+            'global': self.glbl,
+            'frame_config': {
+                'mag_range': self.frame_mag_range,
+                'spectrum_freq': self.frame_freq.tolist()
+            },
+            'global_config': {
+                'time': self.glbl_time.tolist(),
+                'signal_range': self.glbl_sig_range,
+            },
+            'video_link': self.video_link
+        }
+
 def main():
     parser = argparse.ArgumentParser(
         description='analyze audio from video',
@@ -75,6 +126,10 @@ def main():
     parser.add_argument('--force_spectrum_cache', action='store_true')
     parser.add_argument('--noise_frame', type=int, default=5,
                         help='number of frames used for noise sampling')
+    parser.add_argument('--json_out_video_link',
+                        help='video_link used in --json_out')
+    parser.add_argument('--json_out',
+                        help='output processing details to json file')
     parser.add_argument('img', nargs='+')
     args = parser.parse_args()
 
@@ -86,8 +141,14 @@ def main():
     if args.disable_spectrum_cache:
         avg_spectrum.enabled = False
 
+    proc_logger = None
+    if args.json_out:
+        assert args.recon and args.json_out_video_link
+        proc_logger = ReconProcJsonLogger(
+            args.json_out, args.json_out_video_link)
+
     if args.recon:
-        recon = AudioRecon(1 / args.fps)
+        recon = AudioRecon(1 / args.fps, proc_logger)
         if args.recon_nr_iter:
             recon.max_nr_iter = args.recon_nr_iter
     else:

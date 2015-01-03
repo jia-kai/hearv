@@ -1,0 +1,20 @@
+{"example_name": {
+    "frames": [
+         {"spectrum": [mag],
+          "signal":[[t, y]...]}
+    ],
+    "global": [
+        {"iter": <int>,
+         "signal": [y...]
+        }
+    ],
+    "frame_config": {
+        "mag_range": [min, max],
+        "spectrum_freq": [freq...]
+    },
+    "global_config": {
+        "time": [t...],
+        "signal_range": [min, max]
+    },
+    "video_link":
+}}

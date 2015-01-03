@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # $File: recon.py
-# $Date: Sat Jan 03 01:00:45 2015 +0800
+# $Date: Sat Jan 03 22:09:08 2015 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from .config import floatX
@@ -208,17 +208,19 @@ class AudioRecon(object):
     _signal_end = None
     _sample_rate = None
     _window = None
+    _proc_logger = None
 
-    max_nr_iter = 800
+    max_nr_iter = 200
 
     _prev_amp = None
     _all_amp = None
 
-    amp_smooth = 0.4
+    amp_smooth = None
 
-    def __init__(self, target_frame_duration):
+    def __init__(self, target_frame_duration, proc_logger=None):
         self._target_frame_duration = float(target_frame_duration)
         self._all_amp = list()
+        self._proc_logger = proc_logger
 
     def add(self, freq, amp):
         if self._frame_freq_axis is None:
@@ -237,10 +239,13 @@ class AudioRecon(object):
         self._all_amp.append(amp.copy())
         recon = self._recon_single(amp)
         N = recon.size
-        self._ensure_signal_size(loc + N * 2)
+        self._ensure_signal_size(loc + N)
         self._signal[loc:loc+N] = recon
-        self._signal[loc+N:loc+N*2] = recon
         self._signal_end = loc + N
+        if self._proc_logger:
+            self._proc_logger.add_frame(
+                freq, amp,
+                np.arange(loc, loc+N) / self.sample_rate, recon)
         #plot_val_with_fft(self._signal, self._sample_rate)
 
     def get_signal(self):
@@ -280,6 +285,12 @@ class AudioRecon(object):
             if iter_idx % 50 == 0:
                 logger.info('err at iter {}: {}'.format(
                     iter_idx, err / len(time_grid)))
+            if (iter_idx <= 5 or iter_idx % 50 == 0) and \
+                    self._proc_logger:
+                self._proc_logger.add_global_opt(
+                    iter_idx, np.arange(len(signal)) / self.sample_rate,
+                    signal)
+
         return signal
 
     def _get_interpolated_all_amp(self, time_grid):
@@ -326,6 +337,8 @@ class AudioRecon(object):
         return rst
 
     def _smoothed_amp(self, amp):
+        if not self.amp_smooth:
+            return amp
         if self._prev_amp is None:
             self._prev_amp = amp
             return amp
