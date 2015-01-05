@@ -31,7 +31,7 @@ app = angular.module \app, [\ngRoute]
 
 app.factory \DataService, ($http)->
   data = null
-  promise = $http.get('all.json').success (d)!->
+  promise = $http.get('examples.json').success (d)!->
     data := d
   get = -> data
   { promise, get }
@@ -50,6 +50,12 @@ app.controller \ExampleCtrl, ($scope, $routeParams, DataService)!->
       $('video')[0].pause!
     $('#audio-modal').on 'hidden.bs.modal', !->
       $('audio')[0].pause!
+    $('#video-modal').on 'show.bs.modal', !->
+      t = $('video')[0]
+      t.currentTime = 0
+    $('#audio-modal').on 'show.bs.modal', !->
+      t = $('audio')[0]
+      t.currentTime = 0
 
   <-! DataService.promise.then
 
@@ -113,6 +119,8 @@ app.controller \ExampleCtrl, ($scope, $routeParams, DataService)!->
       zoomType: \x
       renderTo: 'spectrum-canvas'
       animation: false
+      height: 300
+      spacingBottom: 0
     plotOptions:
       series:
         color: '#880'
@@ -136,6 +144,7 @@ app.controller \ExampleCtrl, ($scope, $routeParams, DataService)!->
       zoomType: \x
       renderTo: 'global-canvas'
       animation: false
+      height: 320
     plotOptions:
       series:
         color: '#00c'

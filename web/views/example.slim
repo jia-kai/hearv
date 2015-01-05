@@ -12,22 +12,22 @@
       input.bar type='range' min=0 max='{{is_opt ? example.global.length-1 : example.frames.length}}' ng-model='ix' ng-change='set_ix()'
     .form-inline.text-center
       .form-group
-        button.btn.btn-default.btn-lg data-toggle='modal' data-target='#video-modal'
+        button.btn.btn-default data-toggle='modal' data-target='#video-modal'
           span.glyphicon.glyphicon-sd-video
           |  Video
-        /button.btn.btn-default.btn-lg data-toggle='modal' data-target='#audio-modal'
+        button.btn.btn-default data-toggle='modal' data-target='#audio-modal'
           span.glyphicon.glyphicon-sound-stereo
           |  Audio
         input.form-control.fps-input type='number' min=1 max=60 ng-model='fps'
-        button.btn.btn-default.btn-lg ng-click='reset()'
+        button.btn.btn-default ng-click='reset()'
           span.glyphicon.glyphicon-fast-backward
-        button.btn.btn-default.btn-lg ng-click='to_opt()'
+        button.btn.btn-default ng-click='to_opt()'
           span.glyphicon.glyphicon-fast-forward
-        button.btn.btn-default.btn-lg ng-click='toggle()' ng-disabled='! can_next()'
+        button.btn.btn-default ng-click='toggle()' ng-disabled='! can_next()'
           span.glyphicon ng-class='playing ? "glyphicon-pause" : "glyphicon-play"'
-        button.btn.btn-default.btn-lg ng-click='prev()' ng-disabled='! can_prev()'
+        button.btn.btn-default ng-click='prev()' ng-disabled='! can_prev()'
           span.glyphicon.glyphicon-chevron-left
-        button.btn.btn-default.btn-lg ng-click='next()' ng-disabled='! can_next()'
+        button.btn.btn-default ng-click='next()' ng-disabled='! can_next()'
           span.glyphicon.glyphicon-chevron-right
     .container-fluid
       .row
@@ -54,18 +54,18 @@
   .modal-dialog
     .modal-content
       .modal-header
-        .modal-title Video with recovered audio
+        .modal-title Original video with recovered audio
       .modal-body
         video ng-src='{{example.video_link}}' controls=true
       .modal-footer
         button.btn.btn-default data-dismiss='modal' Close
 
 / recovered audio
-/.modal.fade#audio-modal role='dialog'
+.modal.fade#audio-modal role='dialog'
   .modal-dialog
     .modal-content
       .modal-header
-        .modal-title Recovered audio
+        .modal-title Original audio
       .modal-body
         audio ng-src='{{example.audio_link}}' controls=true
       .modal-footer
