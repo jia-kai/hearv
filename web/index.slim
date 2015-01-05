@@ -1,0 +1,26 @@
+doctype 5
+html
+  head
+    title Hearv
+    meta charset='utf-8'
+    link rel='stylesheet' href='../bower_components/bootstrap/dist/css/bootstrap.min.css'
+    link rel='stylesheet' href='../bower_components/bootstrap/dist/css/bootstrap-theme.min.css'
+    link rel='stylesheet' href='css/style.css'
+  body ng-controller='HomeCtrl'
+    nav.navbar.navbar-default
+      .container
+        .navbar-header
+          a href='/'
+            .navbar-brand Hearv
+        .navbar-collapse.collapse
+          ul.nav.navbar-nav
+            li.loading
+              a href='#'
+                span.glyphicon.glyphicon-refresh.glyphicon-refresh-animate
+            li ng-repeat='example in examples'
+              a href='#/examples/{{example}}' ng-bind='example'
+
+    div ng-view=true
+    /! build:js js/dist.js
+    script data-main='js/main' src='../bower_components/requirejs/require.js'
+    /! endbuild

@@ -1,0 +1,72 @@
+.container
+  .row ng-show='!is_opt'
+    .col-sm-6.text-right
+      img#photo ng-src='/{{example_name}}/{{ix}}.png'
+    .col-sm-6
+      output#spectrum-canvas
+  .row
+    .progress
+      input.bar.no-thumb type='range' min=0 max='{{is_opt ? example.global.length-1 : example.frames.length}}' ng-model='ix' ng-change='set_ix()' ng-attr-title='{{ix}}'
+      .progress-bar.progress-bar-striped ng-class='is_opt ? "progress-bar-info" : "progress-bar-success"' ng-style='{ "width": progress+"%" }'
+    /.slider
+      input.bar type='range' min=0 max='{{is_opt ? example.global.length-1 : example.frames.length}}' ng-model='ix' ng-change='set_ix()'
+    .form-inline.text-center
+      .form-group
+        button.btn.btn-default.btn-lg data-toggle='modal' data-target='#video-modal'
+          span.glyphicon.glyphicon-sd-video
+          |  Video
+        /button.btn.btn-default.btn-lg data-toggle='modal' data-target='#audio-modal'
+          span.glyphicon.glyphicon-sound-stereo
+          |  Audio
+        input.form-control.fps-input type='number' min=1 max=60 ng-model='fps'
+        button.btn.btn-default.btn-lg ng-click='reset()'
+          span.glyphicon.glyphicon-fast-backward
+        button.btn.btn-default.btn-lg ng-click='to_opt()'
+          span.glyphicon.glyphicon-fast-forward
+        button.btn.btn-default.btn-lg ng-click='toggle()' ng-disabled='! can_next()'
+          span.glyphicon ng-class='playing ? "glyphicon-pause" : "glyphicon-play"'
+        button.btn.btn-default.btn-lg ng-click='prev()' ng-disabled='! can_prev()'
+          span.glyphicon.glyphicon-chevron-left
+        button.btn.btn-default.btn-lg ng-click='next()' ng-disabled='! can_next()'
+          span.glyphicon.glyphicon-chevron-right
+    .container-fluid
+      .row
+        .col-sm-3.text-right
+          label Window size
+        .col-sm-9
+          .progress
+            input.bar type='range' min=2000 max=20000 step=2000 ng-model='xslice' ng-change='set_slice()' ng-attr-title='{{xslice}}'
+            .progress-bar.progress-bar-warning ng-style='{ "width":(xslice-2000)/(20000-2000)*100+"%" }'
+      .row
+        .col-sm-3.text-right
+          label Window position
+        .col-sm-9
+          .progress
+            input.bar type='range' min='0' max='{{max_yslice()}}' ng-model='yslice' ng-change='set_slice()' ng-attr-title='{{yslice}}'
+            .progress-bar.progress-bar-danger ng-style='{ "width":yslice/max_yslice()*100+"%" }'
+  .row
+    .col-sm-12
+      output#global-canvas
+
+
+/ original video
+.modal.fade#video-modal role='dialog'
+  .modal-dialog
+    .modal-content
+      .modal-header
+        .modal-title Video with recovered audio
+      .modal-body
+        video ng-src='{{example.video_link}}' controls=true
+      .modal-footer
+        button.btn.btn-default data-dismiss='modal' Close
+
+/ recovered audio
+/.modal.fade#audio-modal role='dialog'
+  .modal-dialog
+    .modal-content
+      .modal-header
+        .modal-title Recovered audio
+      .modal-body
+        audio ng-src='{{example.audio_link}}' controls=true
+      .modal-footer
+        button.btn.btn-default data-dismiss='modal' Close
