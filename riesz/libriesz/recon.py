@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # $File: recon.py
-# $Date: Sat Jan 03 22:09:08 2015 +0800
+# $Date: Mon Jan 05 20:45:51 2015 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from .config import floatX
@@ -273,6 +273,11 @@ class AudioRecon(object):
         all_amp = self._get_interpolated_all_amp(time_grid)
         all_amp = [np.concatenate((i, [0], i[1:][::-1])) for i in all_amp]
         for iter_idx in range(self.max_nr_iter):
+            if (iter_idx <= 8 or iter_idx % 25 == 0) and \
+                    self._proc_logger:
+                self._proc_logger.add_global_opt(
+                    iter_idx, np.arange(len(signal)) / self.sample_rate,
+                    signal)
             err = 0
             signal_next = np.zeros_like(signal)
             for i, amp in zip(time_grid, all_amp):
@@ -285,11 +290,6 @@ class AudioRecon(object):
             if iter_idx % 50 == 0:
                 logger.info('err at iter {}: {}'.format(
                     iter_idx, err / len(time_grid)))
-            if (iter_idx <= 5 or iter_idx % 50 == 0) and \
-                    self._proc_logger:
-                self._proc_logger.add_global_opt(
-                    iter_idx, np.arange(len(signal)) / self.sample_rate,
-                    signal)
 
         return signal
 

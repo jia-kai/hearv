@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: main.py
-# $Date: Sat Jan 03 22:36:01 2015 +0800
+# $Date: Mon Jan 05 21:06:27 2015 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from libriesz.utils import CachedResult, plot_val_with_fft
@@ -47,13 +47,16 @@ class CachedFrameSpectrum(CachedResult):
         return self.avg_spectrum(self.motion_ana, fidx)
 
 class ReconProcJsonLogger(object):
-    def __init__(self, fpath, video_link):
+    frame_freq = None
+
+    def __init__(self, fpath, cut_low, cut_high):
         self.frames = []
         self.glbl = []
         self.frame_mag_range = [float('inf'), float('-inf')]
         self.glbl_sig_range = [float('inf'), float('-inf')]
         self.fpath = fpath
-        self.video_link = video_link
+        self.cut_low = cut_low
+        self.cut_high = cut_high
 
     def __del__(self):
         logger.info('save recon process json to {}'.format(self.fpath))
@@ -66,7 +69,11 @@ class ReconProcJsonLogger(object):
 
 
     def add_frame(self, freq, mag, t, y):
-        self.frame_freq = freq
+        if self.frame_freq is None:
+            self.cut_low = min(np.nonzero(freq >= self.cut_low)[0]) - 1
+            self.cut_high = min(np.nonzero(freq >= self.cut_high)[0]) + 1
+            self.frame_freq = freq[self.cut_low:self.cut_high]
+        mag = mag[self.cut_low:self.cut_high]
         self.frames.append({
             'spectrum': mag.tolist(),
             'signal': zip(t.tolist(), y.tolist())
@@ -92,8 +99,7 @@ class ReconProcJsonLogger(object):
             'global_config': {
                 'time': self.glbl_time.tolist(),
                 'signal_range': self.glbl_sig_range,
-            },
-            'video_link': self.video_link
+            }
         }
 
 def main():
@@ -126,8 +132,6 @@ def main():
     parser.add_argument('--force_spectrum_cache', action='store_true')
     parser.add_argument('--noise_frame', type=int, default=5,
                         help='number of frames used for noise sampling')
-    parser.add_argument('--json_out_video_link',
-                        help='video_link used in --json_out')
     parser.add_argument('--json_out',
                         help='output processing details to json file')
     parser.add_argument('img', nargs='+')
@@ -143,9 +147,10 @@ def main():
 
     proc_logger = None
     if args.json_out:
-        assert args.recon and args.json_out_video_link
+        assert args.recon
         proc_logger = ReconProcJsonLogger(
-            args.json_out, args.json_out_video_link)
+            args.json_out,
+            args.cut_low, args.cut_high)
 
     if args.recon:
         recon = AudioRecon(1 / args.fps, proc_logger)
