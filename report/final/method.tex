@@ -1,5 +1,5 @@
 % $File: method.tex
-% $Date: Wed Jan 07 20:48:15 2015 +0800
+% $Date: Wed Jan 07 23:08:41 2015 +0800
 % $Author: jiakai <jia.kai66@gmail.com>
 
 \section{方法}
@@ -211,7 +211,7 @@ $(A_\theta(x, y), D_\theta(x, y))$描述的是局部运动，
     x_\theta^i(t) &=& \frac{\sum_{k=ig_\theta}^{(i+1)g_\theta-1}
     A_\theta(k, t)D_\theta(k, t)}
         {\sum_{k=ig_\theta}^{(i+1)g_\theta-1}A_\theta(k, t)} \\
-    X_\theta^i(f) &=& |\text{DFT}(x_\theta^i)(f)| \\
+    X_\theta^i(\omega) &=& |\text{DFT}(x_\theta^i)(\omega)| \\
     w_\theta^i &=& \sum_{t=1}^{H_\theta}
         {\sum_{k=ig_\theta}^{(i+1)g_\theta-1}A_\theta(k, t)} \\
     && \text{其中，} 0 \le i \le \frac{W_\theta}{g_\theta} - 1 \nonumber
@@ -219,19 +219,19 @@ $(A_\theta(x, y), D_\theta(x, y))$描述的是局部运动，
 
 需要注意的是$(W_\theta, H_\theta) = 2(W_{\theta+1}, H_{\theta+1})$，
 即$X_\theta^i$的长度是$X_{\theta+1}^i$的2倍；但它们对应于原图上不同的空间尺度，
-在卷帘快门下即对应于不同的采样率，因此对于合法的$f$，
-$X_\theta^i(f)$和$X_{\theta+1}^i(f)$所实际对应的频率相同，
+在卷帘快门下即对应于不同的采样率，因此对于合法的$\omega$，
+$X_\theta^i(\omega)$和$X_{\theta+1}^i(\omega)$所实际对应的频率相同，
 所以只需要把$X_\theta^i$中高频的部分丢弃即可。设取了$[0, \theta_m]$间的尺度，
 则最终的平均功率谱为：
 \begin{eqnarray}
-    A(f) &=& \frac{\sum_{\theta=0}^{\theta_m}
-    \sum_{i=0}^{\frac{W_\theta}{g_\theta} - 1}X_\theta^i(f)w_\theta^i}
+    A(\omega) &=& \frac{\sum_{\theta=0}^{\theta_m}
+    \sum_{i=0}^{\frac{W_\theta}{g_\theta} - 1}X_\theta^i(\omega)w_\theta^i}
     {\sum_{\theta=0}^{\theta_m}
     \sum_{i=0}^{\frac{W_\theta}{g_\theta} - 1}w_\theta^i} \\
-    && \text{其中，} 0 \le f \le \frac{1}{2}H_{\theta_m} \nonumber
+    && \text{其中，} 0 \le \omega \le \frac{1}{2}H_{\theta_m} \nonumber
 \end{eqnarray}
-用$d$表示卷帘快门的线延迟，则$A(f)$对应于原信号中频率为
-$\frac{f}{H_{\theta_m}d2^{\theta_m}}$的分量的功率。
+用$d$表示卷帘快门的线延迟，则$A(\omega)$对应于原信号中频率为
+$\frac{\omega}{H_{\theta_m}d2^{\theta_m}}$的分量的功率。
 % f}}}
 
 \subsection{时域音频信号的重建\label{sec:global-opt}}
