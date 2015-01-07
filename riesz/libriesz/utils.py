@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: utils.py
-# $Date: Sat Dec 13 21:45:50 2014 +0800
+# $Date: Wed Jan 07 01:01:59 2015 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 import numpy as np
@@ -70,3 +70,10 @@ def plot_val_with_fft(data, sample_rate=1.0, cut_low=None, cut_high=2000,
         fig.savefig(output)
     if show:
         plt.show()
+
+def get_env_config(name, default):
+    v = os.getenv(name, '')
+    if v:
+        logger.info('set {}={} by environment var'.format(name, v))
+        return v
+    return default

@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # $File: analyze.py
-# $Date: Sun Dec 14 19:46:34 2014 +0800
+# $Date: Wed Jan 07 01:30:31 2015 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from .config import floatX
-from .utils import plot_val_with_fft
+from .utils import plot_val_with_fft, get_env_config
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -104,8 +104,10 @@ class AvgSpectrum(object):
 
     _last_level_nr_sample = None
 
-    vert_group_size = 6
+    vert_group_size = int(get_env_config('VERT_GROUP_SIZE', 150))
     """size of vertical group"""
+
+    vert_group_exp_decay = int(get_env_config('VERT_GROUP_EXP_DECAY', 0))
 
     _real_sample_rate = None
     """actual sample rate of last level in the pyramid"""
@@ -154,6 +156,7 @@ class AvgSpectrum(object):
         padded_width *= 2 ** (motion_ana.nr_level - 1)
         spec_sum = None
         weight_sum = None
+        vg_orig = self.vert_group_size
         for level in range(motion_ana.nr_level):
             frames = [motion_ana(frame_idx + i, level)
                       for i in range(self._nr_adj_frame)]
@@ -167,6 +170,9 @@ class AvgSpectrum(object):
                     spec_sum += spec
                     weight_sum += weight
             padded_width /= 2
+            if self.vert_group_exp_decay:
+                self.vert_group_size /= 2
+        self.vert_group_size = vg_orig
         amp = spec_sum / weight_sum
         assert len(amp) == self._last_level_nr_sample / 2
         freq = np.arange(len(amp), dtype=floatX)
@@ -214,8 +220,6 @@ class RawSpectrogram(object):
     @classmethod
     def make_window(cls, length, win_type='hamming'):
         length = int(length)
-        assert length % 4 == 0, \
-            'length must be multiple of 4 for scaled window'
         if win_type == 'hamming':
             a = 0.54
             b = -0.46
@@ -229,17 +233,22 @@ class RawSpectrogram(object):
         w = a + np.cos(x) * b
         w /= np.sqrt(4 * a * a + 2 * b * b)
 
-        # check for normalization
-        step = length / 4
-        for i in range(length):
-            p = i
-            while p >= step:
-                p -= step
-            s = 0
-            while p < length:
-                s += w[p] * w[p]
-                p += step
-            assert abs(s - 1) < 1e-5
+        if length % 4 == 0:
+            # check for normalization
+            step = length / 4
+            for i in range(length):
+                p = i
+                while p >= step:
+                    p -= step
+                s = 0
+                while p < length:
+                    s += w[p] * w[p]
+                    p += step
+                assert abs(s - 1) < 1e-5
+        else:
+            logger.warn(
+                '\n\n!!!length not multiple of 4 for scaled window, '
+                'do not use recon')
 
         return w
 

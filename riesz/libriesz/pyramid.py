@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 # $File: pyramid.py
-# $Date: Sun Dec 14 16:41:20 2014 +0800
+# $Date: Wed Jan 07 00:02:22 2015 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from .config import floatX
 from .fastmath import smooth_orient, regularize_orient
 from .analyze import Motion1DAnalyserBase
+from .utils import get_env_config
 
 import cv2
 import numpy as np
@@ -35,7 +36,7 @@ class RieszPyramidBuilderBase(object):
 
     min_pyr_img_size = 10
     min_pyr_scale = 0
-    max_pyr_scale = 2
+    max_pyr_scale = int(get_env_config('PYR_LEVEL', 1))
     spatial_blur = 0.5
     spatial_ksize = (3, 3)
 

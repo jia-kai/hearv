@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 # $File: main.py
-# $Date: Mon Jan 05 21:06:27 2015 +0800
+# $Date: Tue Jan 06 23:49:07 2015 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from libriesz.utils import CachedResult, plot_val_with_fft
@@ -23,7 +23,9 @@ logger = logging.getLogger(__name__)
 class CachedRieszPyramid(CachedResult):
     _type = 'riesz-pyr'
 
-    def __init__(self):
+    def __init__(self, args):
+        if args.disable_pyramid_cache:
+            self.enabled = False
         from libriesz.pyramid import RieszPyramidBuilder
         self.builder = RieszPyramidBuilder()
 
@@ -38,13 +40,35 @@ class CachedFrameSpectrum(CachedResult):
     _type = 'spectrum'
 
     def __init__(self, motion_ana, args):
+        if args.disable_spectrum_cache:
+            self.enabled = False
+        self.args = args
         self._cache_dir = os.path.dirname(args.img[0])
         self.avg_spectrum = AvgSpectrum(
             args.nr_adj_frame, 1 / args.line_delay)
         self.motion_ana = motion_ana
 
     def _getter(self, fidx):
-        return self.avg_spectrum(self.motion_ana, fidx)
+        mag, freq = self.avg_spectrum(self.motion_ana, fidx)
+        if self.args.spectrum_snr:
+            cl = self.args.cut_low
+            ch = self.args.cut_high
+            snr = self._snr(mag[(freq >= cl) * (freq <= ch)])
+            logger.info('SNR: snr={}'.format(snr))
+            print snr
+        return mag, freq
+
+    @staticmethod
+    def _snr(mag):
+        """signal-to-noise ratio, assuming groundtruth contains only one
+        freq"""
+        tot_power = np.sum(np.square(mag))
+        idx = np.argmax(mag)
+        mag = mag.copy()
+        sig_power = mag[idx] ** 2
+        mag[idx] = 0
+        return sig_power / (tot_power - sig_power)
+        return sig_power / np.max(mag) ** 2
 
 class ReconProcJsonLogger(object):
     frame_freq = None
@@ -121,6 +145,8 @@ def main():
     parser.add_argument('--disp', action='store_true',
                         help='display spectrum for each frame (enabled when'
                         ' recon not supplied)')
+    parser.add_argument('--disp_save',
+                        help='save display graph to file')
     parser.add_argument('--disp_all', action='store_true',
                         help='display all spectrums in a single plot')
     parser.add_argument('--nr_adj_frame', type=int, default=1,
@@ -129,21 +155,22 @@ def main():
     parser.add_argument('--frame_duration_scale', type=float, default=1,
                         help='scale frame duration for spectrum analysis')
     parser.add_argument('--disable_spectrum_cache', action='store_true')
+    parser.add_argument('--disable_pyramid_cache', action='store_true')
     parser.add_argument('--force_spectrum_cache', action='store_true')
     parser.add_argument('--noise_frame', type=int, default=5,
                         help='number of frames used for noise sampling')
     parser.add_argument('--json_out',
                         help='output processing details to json file')
+    parser.add_argument('--spectrum_snr', action='store_true',
+                        help='calculate SNR of spectrum')
     parser.add_argument('img', nargs='+')
     args = parser.parse_args()
 
     win_length = args.frame_win_length + args.nr_adj_frame + 1
-    get_riesz_pyr = CachedRieszPyramid()
+    get_riesz_pyr = CachedRieszPyramid(args)
     pyr_list = (map(get_riesz_pyr, args.img[:win_length]))
     motion_ana = pyr_list[0].make_motion_analyser(pyr_list)
     avg_spectrum = CachedFrameSpectrum(motion_ana, args)
-    if args.disable_spectrum_cache:
-        avg_spectrum.enabled = False
 
     proc_logger = None
     if args.json_out:
@@ -196,11 +223,17 @@ def main():
         amp[cut_high:] = 0
         if i == 1:
             logger.info('freq_resolution={}'.format(i, freq[1] - freq[0]))
-        if args.disp:
+        if args.disp or args.disp_save:
             logger.info('disp spectrum')
             plt.figure()
+            plt.xlabel('freq')
+            plt.ylabel('mag')
+            plt.grid(which='both')
             plt.plot(freq[cut_low:cut_high], amp[cut_low:cut_high])
-            plt.show()
+            if args.disp_save:
+                plt.savefig(args.disp_save)
+            if args.disp:
+                plt.show()
         if args.disp_all:
             ax_all.plot(freq[cut_low:cut_high], amp[cut_low:cut_high],
                         label='frame{}'.format(i))

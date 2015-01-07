@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # $File: recon.py
-# $Date: Mon Jan 05 20:45:51 2015 +0800
+# $Date: Wed Jan 07 19:54:08 2015 +0800
 # $Author: jiakai <jia.kai66@gmail.com>
 
 from .config import floatX
@@ -273,6 +273,14 @@ class AudioRecon(object):
         all_amp = self._get_interpolated_all_amp(time_grid)
         all_amp = [np.concatenate((i, [0], i[1:][::-1])) for i in all_amp]
         for iter_idx in range(self.max_nr_iter):
+            if True and (iter_idx <= 20 or iter_idx == 200):
+                fig = plt.figure(figsize=(10.24, 3))
+                ax = fig.add_subplot(111)
+                ax.set_xlabel('t')
+                ax.set_ylabel('signal')
+                ax.set_ylim((-0.004, 0.004))
+                ax.plot(np.arange(2000) / self.sample_rate, signal[:2000])
+                fig.savefig('/tmp/opt{:02d}.png'.format(iter_idx))
             if (iter_idx <= 8 or iter_idx % 25 == 0) and \
                     self._proc_logger:
                 self._proc_logger.add_global_opt(

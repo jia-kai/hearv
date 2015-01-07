@@ -1,0 +1,306 @@
+% $File: method.tex
+% $Date: Wed Jan 07 20:48:15 2015 +0800
+% $Author: jiakai <jia.kai66@gmail.com>
+
+\section{方法}
+
+在本节中介绍我们所采用的算法，分为卷帘快门、局部运动分析、单帧频谱恢复和
+时域信号重建四大方面。
+
+\subsection{卷帘快门建模及参数估计\label{sec:rolling-shutter}}
+% f{{{
+数码相机的快门一般有全局快门和卷帘快门两大类。对于卷帘快门，快门速度为$E$时，
+其第$y$行对应的曝光时段近似为：
+\begin{equation}
+    I_y = [yd, yd+E]
+\end{equation}
+其中$d$是线延迟，也就是感光器的两行像素间曝光的时间差。这样，
+如果把每行看作单独的一帧，我们相当于达到了$1/d$的采样率。
+
+\cite{Davis2014VisualMic}采取测量直线斜率的方法得到Pentax K-01
+相机的线延迟为16微秒，但没有详述其具体实现。我们缺乏生成高速运动直线的设备，
+在仅有未知频率高速频闪LED的情况下实现了对线延迟的测量。
+
+对于具有亮度调节功能的LED灯，其实现低亮度的方法往往是降低光源信号的占空比，
+因此相当于有一个高速频闪的光源。在较高快门下对这样的光源录影，可得到条纹图像，
+如\figref{rolling-shutter-record}所示。
+\begin{figure}[h!]\begin{center}
+    \begin{subfigure}[b]{.5\figwidth}
+        \centering
+        \includegraphics[width=.5\figwidth]{res/rolling0.png}
+        \caption{1/1000s 快门速度}
+    \end{subfigure}
+    \begin{subfigure}[b]{.5\figwidth}
+        \centering
+        \includegraphics[width=.5\figwidth]{res/rolling1.png}
+        \caption{1/4000s 快门速度}
+    \end{subfigure}
+    \caption{用卷帘快门对高速频闪光源下的坐标纸成像结果
+        \label{fig:rolling-shutter-record}}
+\end{center}\end{figure}
+
+设$[T_0, T_1]$时段里光源点亮，则此时能呈现亮条的行$y$需满足条件：
+\begin{equation}
+    [yd, yd+E] \cap [T_0, T_1] \ge T_\theta
+\end{equation}
+其中$T_\theta$为需要点亮一行像素所需的最短曝光时间。如果光源点亮时长恒定，
+当$E$变化时，亮条高度也会变化，有如下关系：
+\begin{equation}
+    \Delta_H d \approx \Delta_E
+\end{equation}
+
+因此通过测量亮条高度和快门速度间的关系，可以推出线延迟。
+我们购买了与\cite{Davis2014VisualMic}中同样型号的相机，
+测量七组数据求得的平均线延迟为18.3微秒，与原文中的结论较为接近，
+对应的采样率约为54644Hz。
+% f}}}
+
+\subsection{运动分析：基于Complex Steerable Pyramid分解}
+% f{{{
+\cite{Davis2014VisualMic}采取了基于Complex Steerable Pyramid的方法进行运动恢复，
+由于其实现比较复杂，效率更低，而且需要预先定义好几个离散的朝向而未被我们采用；
+但在此我们也对其进行简单叙述。
+
+Complex Steerable Pyramid是可以把图片分解为不同方向和尺度的子频带滤波器组，
+最初由Portilla和Simoncelli提出用于纹理分析和合成\cite{Portilla99}。
+对于单通道图像$I: \mathbb{Z}^2 \mapsto \mathbb{R}$和给定的尺度$r$及旋转方向
+$\theta$，在$I$的每一个局部$(x, y)$附近，可利用Complex Steerable Pyramid
+将其对应的频带表示为：
+\begin{equation}
+    A(r, \theta, x, y) e^{i\varphi(r, \theta, x, y)}
+\end{equation}
+扩展到视频中，可得到$t$时刻时某空间位置对应的相位$\varphi(r, \theta, x, y, t)$。
+则相对某参考帧$t_0$的相位差
+\begin{equation}
+    \varphi_v(r, \theta, x, y, t) = \varphi(r, \theta, x, y, t) - 
+    \varphi(r, \theta, x, y, t_0)
+\end{equation}
+对应于$t$时刻$(x, y)$点在$(r, \theta)$方向上的运动。
+
+有了局部运动信息后，对每个$(r_i, \theta_i)$二元组计算全局平均运动：
+\begin{equation}
+    \Phi(r_i, \theta_i, t) = \sum_{x, y}
+    A(r, \theta, x, y, t)^2 \varphi_v(r, \theta, x, y, t)
+\end{equation}
+
+随后，在时间上对$\Phi(r_i, \theta_i, t)$进行平移以防止不同方向的震动相抵消：
+\begin{equation}
+    t_i = \arg\max_{t_i} \trans{\Phi(r_0, \theta_0, t)}\Phi(r_i, \theta_i, t +
+    t_i)
+\end{equation}
+
+最后，对所有$\Phi(r_i, \theta_i, t + t_i)$按$i$求平均就是$t$时刻全局运动，
+对应此时的声音信号。
+
+但该方法实现比较复杂而且计算量较大，我们目前还没测试，而是使用了下文所述的基于
+Riesz变换的方法。
+
+% f}}}
+
+\subsection{运动分析：基于Riesz变换}
+% f{{{
+Riesz变换\cite{felsberg2001monogenic}是对分析信号的二维扩展。
+一个一维实信号的分析信号是复信号，由原信号加上其希尔伯特变换作为虚部得到，
+其具有振幅连续性，由分析信号的相位差可以检测出两个实信号的局部平移变化。
+Riesz变换将此扩展到二维，可以把二维实信号分解为振幅、幅角、相位三个分量，
+对于图像而言，相位变化对应原图在空域上的位移。Unser等人将此扩展到了多分辨率
+\cite{unser2009multiresolution}，而Wadhwa等则实现了在空域上操作的近似Riesz变换
+并以此实现实时运动放大\cite{Wadhwa2014RieszPyramid}。
+
+具体而言，Riesz变换由一对滤波器组成，其转移函数分别为
+\begin{equation}
+    -i\frac{\omega_x}{\parallel \overrightarrow{ \omega} \parallel},~
+    -i\frac{\omega_y}{\parallel \overrightarrow{ \omega} \parallel}
+\end{equation}
+将其应用到子频带图像$I$上时，得到滤波器响应$(R_1, R_2)$，于是局部的振幅$A$、
+主方向$\theta$和相位$\phi$满足：
+\begin{equation}
+    I = A\cos(\phi),~R_1 = A\sin(\phi)\cos(\theta),~
+    R_2 = A\sin(\phi)\sin(\theta)
+    \label{eqn:riesz:decomp}
+\end{equation}
+
+而\cite{Wadhwa2014RieszPyramid}中，作者证明了用$[0.5,0,-0.5]$和
+$\trans{[0.5,0,-0.5]}$两个空域上的卷积核就可以较好地近似Riesz变换。
+
+但Riesz变换尚未被用于物体的整体运动分析，
+在\cite{Wadhwa2014RieszPyramid}中也仅用于局部运动分析来进行运动放大。
+如果要用于整体分析，有个本质性的问题是
+$(A, \phi, \theta)$和$(A, -\phi, \theta + \pi)$都是\eqnref{riesz:decomp}的解，
+无法唯一确定相位，也就无法简单的得到在单帧中各空间位置一致的相位差。
+
+为了解决这个问题，我们提出了朝向平滑算法。对于图像$(A(x, y), \phi(x, y),
+\theta(x, y))$，设其平滑后的图像为$(A_s(x, y), \phi_s(x, y), \theta_s(x, y))$，
+需要求出$k(x, y)\in \mathbb{Z}$，满足：
+\begin{eqnarray}
+    |\theta(x, y) + k(x, y)\pi - \theta_0(x, y)| &\le& \frac{\pi}{2} \nonumber \\
+    A_s(x, y) &=& A(x, y) \nonumber \\
+    \theta_s(x, y) &=& \theta(x, y) + k(x, y)\pi \nonumber \\
+    \phi_s(x, y) &=& (-1)^k\phi(x, y)
+\end{eqnarray}
+其中$\theta_0(x, y)$为目标朝向，先各行独立进行指数滤波平滑，
+$\theta_0(x+1, y) = \alpha\theta_0(x, y) + (1-\alpha)\theta_s(x, y)$，
+再同理在各行之间进行平滑。平滑算法的效果如\figref{smooth}所示。
+\begin{figure}[h!]\begin{center}
+    \begin{subfigure}[b]{.5\figwidth}
+        \centering
+        \includegraphics[width=.5\figwidth]{res/smooth-0.png}
+        \caption{未进行朝向平滑}
+    \end{subfigure}
+    \begin{subfigure}[b]{.5\figwidth}
+        \centering
+        \includegraphics[width=.5\figwidth]{res/smooth-1.png}
+        \caption{进行朝向平滑}
+    \end{subfigure}
+    \caption{朝向平滑算法效果\label{fig:smooth}}
+\end{center}\end{figure}
+
+对于两帧$F_1 = (A_1, \phi_1, \theta_1)$和$F_2 = (A_2, \phi_2, \theta_2)$，
+先将$F_1$按上述方法进行朝向平滑得到$F_{1s}$，再令上述算法中的
+$\theta_0=\theta_{1s}$对$F_2$平滑得到$F_{2s}$，使得$\theta_{2s}$与$\theta_{1s}$
+尽量接近，于是可得全局相位差
+\begin{equation}
+    \delta_\phi(F_1, F_2) = \sum_{x, y}
+    \left(\frac{A_{1s}(x, y) + A_{2s}(x, y)}{2}\right)^2(\phi_{2s}(x, y) -
+    \phi_{1s}(x, y))
+    \label{eqn:global-phasediff}
+\end{equation}
+
+另外，在基于视频进行运动恢复的情况下，
+我们也尝试了其它的消除$(\phi, \theta)$和$(-\phi, \theta+\pi)$歧义的方法。
+取二元组$Q=(\phi\sin(\theta), \phi\cos(\theta))$，则$Q$是不存在这种歧义的，
+但每个点的运动信号都变成了二维。于是对每个点，可取出其在各帧的$Q$值，
+进行主分量分析(PCA)投影到一维，得到该点的一维运动信号。
+但实验发现这种方法效果并不好。
+
+% f}}}
+
+\subsection{单帧卷帘快门图像中的高频信号分析：MSA算法\label{sec:algo-hf}}
+% f{{{
+使用前述Complex Steerable Pyramid分解或者在Laplacian Pyramid
+的每一级使用上述Riesz变换，均可得到图像在某个尺度下局部的运动情况。
+下一步的问题就是如何利用该信息和前述的卷帘快门性质，来恢复曝光时间段内的信号。
+
+具体而言，现在已知$(A_\theta(x, y), D_\theta(x, y))$，
+分别为在$\theta$的尺度下，当前帧和参考帧在$(x, y)$处的振幅均值和相位差。
+其中$\theta$为非负整数，表示当前尺度的空间分辨率为原图的$\frac{1}{2^\theta}$。
+
+\cite{Davis2014VisualMic}中主要处理了对全局震动的恢复，
+但对基于卷帘快门图像的具体恢复方法没有详述；在此我们借鉴了其中的一些思想，
+提出了多尺度频谱平均算法，简称为MSA(Multi-scale Spectrum Averaging)。
+
+$(A_\theta(x, y), D_\theta(x, y))$描述的是局部运动，
+我们的基本思想是在同一尺度的相邻空间范围内对局部运动加权平均，
+再对得到的平均运动进行DFT变换得到频谱，最后将各频谱在对应频率上的功率进行平均，
+最终的到这段时间内原始信号的功率谱。这样做主要出于以下两点原因：
+\begin{enumerate}
+    \item 物体表面的震动分布很复杂，如果简单的进行全局的运动平均，
+        很可能各部分的震动由于相位差而相互抵消，导致平均信号中信息丢失；
+    \item 人耳主要对各频率的能量敏感而对相位不敏感，
+        这样我们可以对频谱的功率进行平均，
+        并仍能保证重建出的信号与原信号相比对人耳的区别不大
+        \footnote{这方面没找到权威文献，可参考
+            \url{http://en.wikipedia.org/wiki/Audio\_system\_measurements}
+        中的Phase distortion部分}。
+\end{enumerate}
+
+具体而言，对于$\theta$尺度，设图像大小为$H_\theta \times W_\theta$；
+另外需要先确定参数$g_\theta$，表示按列进行分组平均的组的大小。
+随后用振幅加权得到各组的时域信号、功率谱及权重：
+\begin{eqnarray}
+    x_\theta^i(t) &=& \frac{\sum_{k=ig_\theta}^{(i+1)g_\theta-1}
+    A_\theta(k, t)D_\theta(k, t)}
+        {\sum_{k=ig_\theta}^{(i+1)g_\theta-1}A_\theta(k, t)} \\
+    X_\theta^i(f) &=& |\text{DFT}(x_\theta^i)(f)| \\
+    w_\theta^i &=& \sum_{t=1}^{H_\theta}
+        {\sum_{k=ig_\theta}^{(i+1)g_\theta-1}A_\theta(k, t)} \\
+    && \text{其中，} 0 \le i \le \frac{W_\theta}{g_\theta} - 1 \nonumber
+\end{eqnarray}
+
+需要注意的是$(W_\theta, H_\theta) = 2(W_{\theta+1}, H_{\theta+1})$，
+即$X_\theta^i$的长度是$X_{\theta+1}^i$的2倍；但它们对应于原图上不同的空间尺度，
+在卷帘快门下即对应于不同的采样率，因此对于合法的$f$，
+$X_\theta^i(f)$和$X_{\theta+1}^i(f)$所实际对应的频率相同，
+所以只需要把$X_\theta^i$中高频的部分丢弃即可。设取了$[0, \theta_m]$间的尺度，
+则最终的平均功率谱为：
+\begin{eqnarray}
+    A(f) &=& \frac{\sum_{\theta=0}^{\theta_m}
+    \sum_{i=0}^{\frac{W_\theta}{g_\theta} - 1}X_\theta^i(f)w_\theta^i}
+    {\sum_{\theta=0}^{\theta_m}
+    \sum_{i=0}^{\frac{W_\theta}{g_\theta} - 1}w_\theta^i} \\
+    && \text{其中，} 0 \le f \le \frac{1}{2}H_{\theta_m} \nonumber
+\end{eqnarray}
+用$d$表示卷帘快门的线延迟，则$A(f)$对应于原信号中频率为
+$\frac{f}{H_{\theta_m}d2^{\theta_m}}$的分量的功率。
+% f}}}
+
+\subsection{时域音频信号的重建\label{sec:global-opt}}
+% f{{{
+基于\secref{algo-hf}的算法得到视频各帧的频谱后，还需要将其在时域上拼接起来
+得到一段人耳可辨识的声音。然而，如果只是简单的对各帧频谱进行IDFT变化，
+是很难得到可用的音频的，原因有以下两点：
+\begin{enumerate}
+    \item 相位信息已经在频谱平均过程中丢失了，无法直接进行IDFT
+    \item 在视频分辨率为$1280\times 720$，线延迟$18.3\mu$s的情况下，
+        每帧的采样时间为0.013s，而视频帧率为60fps，两帧间隔为0.017s，
+        也就是说每帧内大概有1/3的时间没有采样，有信息丢失。
+\end{enumerate}
+
+期间我们尝试过使用随机相位、overlap-add等各种方法进行全局恢复，
+但由于视频帧率为60fps，这类方法总会在两帧交接处产生一些artifact，
+最终导致得到的音频中有60Hz左右的beat，对人耳的听觉感知影响严重。
+
+后来我们发现这是学术界已经研究过的一类问题：
+基于修改过的短时Fourier变换的信号重建。G\&L算法\cite{griffin1984signal}
+是该领域的一个经典算法，
+大致思想是定义一个重建信号的STFT到给定STFT的L2距离作为损失函数，
+并证明了用一个迭代公式可以收敛到局部最优解。具体而言，
+对时域信号$x(n)$，用$X_w(mS, \omega)$表示其在以$S$为步长的STFT中，
+第$m$个时段内$\omega$频率所对应的功率，
+则时域信号$x(n)$和给定的STFT $Y_w(mS, \omega)$间的距离定义为：
+\begin{equation}
+    D[x(n), Y_w(mS, \omega)] = \sum_{m}\frac{1}{2\pi}
+    \int_{-\pi}^{\pi}\left|X_w(mS,\omega)-Y_w(mS,\omega)\right|^2
+    \dif{\omega}
+\end{equation}
+
+最终所求$x(n)=\argmin_{x(n)}D[x(n), Y_w(mS, \omega)]$，
+对此，可以用下式进行迭代求解：
+\begin{equation}
+    x^{i+1}(n) = \frac{\sum_{m}w(mS-n)\frac{1}{2\pi}
+        \int_{-\pi}^{\pi}|Y_w(mS,\omega)|\frac{
+        X_w^i(mS,\omega)}{|X_w^i(mS,\omega)|}}{
+        \sum_m w^2(mS-n)}
+    \label{eqn:gliter}
+\end{equation}
+其中$w(n)$是STFT所用的窗函数。
+
+直观上\eqnref{gliter}是很好理解的，每次迭代相当于用当前$x^i(n)$的相位和
+$Y_w(mS, \omega)$所需要的功率组合得到$x^{i+1}(n)$。Griffin等在
+\cite{griffin1984signal}中给出了更多细节，
+并证明了这样的迭代最终会收敛到局部最优解。
+
+另一个问题是，我们恢复出的单帧信号之间没有交叠，
+不能直接用于STFT目标来进行音频恢复。对此我们的解决方法是对功率谱进行指数插值。
+
+具体而言，对于$n$帧的视频，各帧的时间点为$t_0,\cdots t_{n-1}$，
+其中$t_i=if_s^{-1}$，$f_s$是视频的帧率。另外，
+记$\hat{t}=Hd$为单帧内采样的时间，其中$H$为视频图像高度，$d$为卷帘快门的线延迟。
+在第$i$帧，即$[t_i, t_i+\hat{t}]$时段内恢复出的功率谱为$A_i(\omega)$。
+
+我们以$\hat{t}$作为STFT的窗口大小，并按照\cite{griffin1984signal}中取
+$S=\frac{1}{4}\hat{t}$作为STFT的步长，则STFT所需求的时间点为$t'_i=iS$。
+为了得到在$t'_i$时对应的功率谱$Y_i$，先找到$j$满足$t_j\le t'_i < t_{j+1}$，取：
+\begin{eqnarray}
+    Y_i(\omega) &=& \exp{L(\log{A_j(\omega)}, \log{A_{j+1}(\omega)},
+    \frac{t'_i-t_j}{t_{j+1}-t_j})} \\
+    \text{其中, } L(p, q, \alpha) &=& (1-\alpha)p+\alpha q \nonumber
+\end{eqnarray}
+
+另外，在实现时，我们取从随机相位重建出的信号作为G\&L算法的迭代初解，
+以期初始解比较平滑。
+
+% f}}}
+
+% vim: filetype=tex foldmethod=marker foldmarker=f{{{,f}}} 
+

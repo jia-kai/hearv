@@ -1,0 +1,79 @@
+% $File: report.tex
+% $Date: Tue Jan 06 19:48:44 2015 +0800
+% $Author: jiakai <jia.kai66@gmail.com>
+
+\documentclass[a4paper]{article}
+\usepackage{amsmath,amssymb,amsthm,fontspec,verbatim,graphicx,subcaption,dirtree}
+\usepackage[hyperfootnotes=false,colorlinks,linkcolor=black,anchorcolor=black,citecolor=black]{hyperref}
+\usepackage[top=2in, bottom=1.5in, left=1in, right=1in]{geometry}
+ 
+\newcommand{\addplot}[1]{\begin{center}
+	\includegraphics[width=0.6\paperwidth,height=0.2\paperheight,keepaspectratio]{#1}
+\end{center}}
+
+% minted
+% \inputmintedConfigured[additional minted options]{lang}{file path}
+\usepackage{minted}
+\newcommand{\inputmintedConfigured}[3][]{\inputminted[fontsize=\scriptsize,
+	label=#3,linenos,frame=lines,framesep=0.8em,tabsize=4,#1]{#2}{#3}}
+% \*src[additional minted options]{file path}
+\newcommand{\cppsrc}[2][]{\inputmintedConfigured[#1]{cpp}{#2}}
+
+% bib 
+\usepackage{biblatex}
+\bibliography{refs.bib}
+\defbibheading{bibliography}{\section{参考文献}}
+
+% math
+\usepackage{bm}
+\newcommand{\trans}[1]{#1^\intercal}
+\numberwithin{equation}{section}
+\renewcommand{\vec}[1]{\boldsymbol{#1}}
+\newcommand{\dif}{\mathrm{d}}
+\usepackage{mathtools}
+\DeclarePairedDelimiter{\ceil}{\lceil}{\rceil}
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+% \textref{marker}{text}
+\newcommand{\textref}[2]{\hyperref[#1]{#2}}
+\newcommand{\figref}[1]{\hyperref[fig:#1]{\figurename~\ref*{fig:#1}}}
+\newcommand{\eqnref}[1]{\hyperref[eqn:#1]{(\ref*{eqn:#1})}}
+\newcommand{\secref}[1]{\hyperref[sec:#1]{\ref*{sec:#1}节}}
+
+% zhspacing
+\usepackage{zhspacing}
+\zhspacing
+
+\newlength{\figwidth}
+\setlength{\figwidth}{150mm}
+
+\renewcommand{\today}{\number\year 年 \number\month 月 \number\day 日}
+\renewcommand{\abstractname}{摘要}
+\renewcommand{\contentsname}{目录}
+\renewcommand{\tablename}{表}
+\renewcommand{\figurename}{图}
+
+\title{Hearv: 基于卷帘快门相机视频中物体震动的声音信号被动恢复}
+\author{清华大学\\贾开~宋方睿}
+\date{}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+    声音会造成物体表面的震动。Davis等人在\cite{Davis2014VisualMic}
+    中描述了通过在高速摄影的视频里分析物体表面震动来恢复环境声音的方法，
+    并且也对在没有高速摄影的情况下通过卷帘快门相机视频来分析物体运动的
+    方法进行了简单介绍。在本文中，我们着重研究后者的具体方法，
+    并且在相对简陋的实验条件下成功恢复出了10倍于视频帧率的信号。
+\end{abstract}
+\tableofcontents
+\input{intro}
+\input{method}
+\input{expr}
+\input{discuss}
+
+\printbibliography
+\end{document}
+
+% vim: filetype=tex foldmethod=marker foldmarker=f{{{,f}}}
+
